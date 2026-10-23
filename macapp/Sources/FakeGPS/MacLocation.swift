@@ -11,6 +11,7 @@ final class MacLocation: NSObject, ObservableObject {
     @Published private(set) var isLocating = false
     @Published private(set) var message = ""
     @Published private(set) var needsLocationSettings = false
+    @Published private(set) var isAwaitingAuthorization = false
 
     private var manager: CLLocationManager?
     private var timeout: Task<Void, Never>?
@@ -48,6 +49,7 @@ final class MacLocation: NSObject, ObservableObject {
         manager = nil
         requestedFix = false
         needsLocationSettings = false
+        isAwaitingAuthorization = false
         location = nil
         isLocating = false
         message = ""
@@ -57,11 +59,14 @@ final class MacLocation: NSObject, ObservableObject {
         guard self.manager === manager, isLocating || needsLocationSettings else { return }
         switch manager.authorizationStatus {
         case .notDetermined:
+            guard !isAwaitingAuthorization else { return }
+            isAwaitingAuthorization = true
             needsLocationSettings = false
             isLocating = true
             message = "Allow location access to find this Mac."
             manager.requestWhenInUseAuthorization()
         case .authorizedAlways, .authorizedWhenInUse:
+            isAwaitingAuthorization = false
             // Resume automatically if access was enabled in System Settings.
             if needsLocationSettings {
                 requestedFix = false
@@ -86,6 +91,7 @@ final class MacLocation: NSObject, ObservableObject {
     }
 
     private func fail(_ message: String) {
+        isAwaitingAuthorization = false
         timeout?.cancel()
         manager?.stopUpdatingLocation()
         isLocating = false

@@ -66,6 +66,13 @@ struct ContentView: View {
                 }.padding(20)
             }
         }
+        .disabled(macLocation.isAwaitingAuthorization)
+        .accessibilityHidden(macLocation.isAwaitingAuthorization)
+        .overlay {
+            if macLocation.isAwaitingAuthorization {
+                locationPermissionOverlay
+            }
+        }
         .frame(minWidth: 940, idealWidth: 1180, minHeight: 650, idealHeight: 760)
         .task(id: "\(devices.connectedUDID ?? "none")-\(connectionAttempt)") {
             await connectAutomatically()
@@ -97,6 +104,34 @@ struct ContentView: View {
                 mode = .explore
             }
         }
+    }
+
+    private var locationPermissionOverlay: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "location.circle.fill")
+                .font(.system(size: 64, weight: .light))
+                .foregroundStyle(.blue)
+                .accessibilityHidden(true)
+            Text("Allow location access")
+                .font(.largeTitle.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
+            Text("Click “Allow” in the macOS permission dialog to center the map on your current location.")
+                .font(.title3)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 440)
+            Text("We use this Mac’s location as the starting point for your connected device.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 400)
+            ProgressView("Waiting for your choice…")
+                .controlSize(.small)
+                .padding(.top, 8)
+        }
+        .padding(40)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.regularMaterial)
+        .contentShape(Rectangle())
     }
 
     private var sidebar: some View {
