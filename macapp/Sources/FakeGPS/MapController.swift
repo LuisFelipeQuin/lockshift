@@ -8,11 +8,19 @@ import MapKit
 /// coordinator and only ever invoked on the main thread.
 final class MapController: ObservableObject {
     var recenter: ((CLLocationCoordinate2D, CLLocationDistance) -> Void)?
+    var panTo: ((CLLocationCoordinate2D) -> Void)?
     var zoomBy: ((Double) -> Void)?
     var currentCenter: (() -> CLLocationCoordinate2D?)?
 
     func center(on coord: CLLocationCoordinate2D, meters: CLLocationDistance = 1_500) {
         recenter?(coord, meters)
+    }
+
+    /// Brings a coordinate to the middle of the map at the zoom the user has
+    /// already chosen. Unlike `center(on:meters:)` this never zooms, so picking
+    /// a destination cannot yank a wide overview down to street level.
+    func focus(on coord: CLLocationCoordinate2D) {
+        panTo?(coord)
     }
 
     func zoomIn() { zoomBy?(0.5) }

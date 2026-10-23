@@ -97,6 +97,15 @@ struct MapView: NSViewRepresentable {
                     animated: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
                 )
             }
+            controller.panTo = { [weak self] coord in
+                guard let map = self?.mapView else { return }
+                // Explicit destinations leave native location tracking.
+                map.setUserTrackingMode(.none, animated: false)
+                map.setRegion(
+                    Self.region(map.region, centeredOn: coord),
+                    animated: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+                )
+            }
             controller.zoomBy = { [weak self] factor in
                 guard let map = self?.mapView else { return }
                 var region = map.region
@@ -107,6 +116,12 @@ struct MapView: NSViewRepresentable {
                 map.setRegion(region, animated: true)
             }
             controller.currentCenter = { [weak self] in self?.mapView?.region.center }
+        }
+
+        /// Same zoom, new centre. Kept pure so the pan can be tested without a
+        /// live window driving MapKit's animation.
+        static func region(_ region: MKCoordinateRegion, centeredOn coord: CLLocationCoordinate2D) -> MKCoordinateRegion {
+            MKCoordinateRegion(center: coord, span: region.span)
         }
 
         @objc func handleClick(_ gr: NSClickGestureRecognizer) {
@@ -308,6 +323,10 @@ final class DestinationMapView: MKMapView {
     var onLayout: (() -> Void)?
     var onManualZoom: (() -> Void)?
     private var zoomMonitor: Any?
+
+    // Without this, the click that makes our window key is swallowed by
+    // activation and the user has to click a second time to place a pin.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()

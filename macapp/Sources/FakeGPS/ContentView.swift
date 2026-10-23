@@ -458,7 +458,14 @@ struct ContentView: View {
     private func handleTap(_ coordinate: CLLocationCoordinate2D) {
         guard canSimulate, mode != .explore else { return }
         following = false
-        if mode == .route { engine.addWaypoint(coordinate) } else { selection = coordinate }
+        if mode == .route {
+            engine.addWaypoint(coordinate)
+        } else {
+            selection = coordinate
+            // One click is the whole selection gesture here, so bring the pin to
+            // the middle of the map; that also gives its card room to open.
+            mapController.focus(on: coordinate)
+        }
     }
     private func icon(_ mode: EditMode) -> String {
         switch mode { case .explore: return "iphone"; case .teleport: return "mappin.and.ellipse"; case .route: return "point.topleft.down.to.point.bottomright.curvepath" }
