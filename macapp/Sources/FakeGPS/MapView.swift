@@ -9,6 +9,7 @@ struct MapView: NSViewRepresentable {
     var waypoints: [Waypoint]
     var currentCoordinate: CLLocationCoordinate2D?
     var locationTitle: String
+    var locationAccessReady: Bool
     var selectedCoordinate: CLLocationCoordinate2D?
     var controller: MapController
     /// Called with the map coordinate the user clicked.
@@ -22,6 +23,7 @@ struct MapView: NSViewRepresentable {
         map.delegate = context.coordinator
         map.showsZoomControls = true
         map.showsCompass = true
+        map.showsUserTrackingButton = true
         map.showsPitchControl = false
         map.pointOfInterestFilter = .excludingAll
         map.preferredConfiguration = MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: .muted)
@@ -36,6 +38,7 @@ struct MapView: NSViewRepresentable {
             action: #selector(Coordinator.handleClick(_:))
         )
         click.numberOfClicksRequired = 1
+        click.delegate = context.coordinator
         click.delaysPrimaryMouseButtonEvents = false
         map.addGestureRecognizer(click)
         context.coordinator.mapView = map
@@ -53,13 +56,16 @@ struct MapView: NSViewRepresentable {
 
     func updateNSView(_ map: MKMapView, context: Context) {
         context.coordinator.parent = self
+        if map.showsUserLocation != locationAccessReady {
+            map.showsUserLocation = locationAccessReady
+        }
         context.coordinator.sync(waypoints: waypoints, current: currentCoordinate)
         context.coordinator.syncSelection(selectedCoordinate)
     }
 
     // MARK: - Coordinator
 
-    final class Coordinator: NSObject, MKMapViewDelegate {
+    final class Coordinator: NSObject, MKMapViewDelegate, NSGestureRecognizerDelegate {
         var parent: MapView
         weak var mapView: MKMapView?
         private var routeOverlay: MKPolyline?
@@ -79,6 +85,8 @@ struct MapView: NSViewRepresentable {
             let controller = parent.controller
             controller.recenter = { [weak self] coord, meters in
                 guard let map = self?.mapView else { return }
+                // Explicit destinations leave native location tracking.
+                map.setUserTrackingMode(.none, animated: false)
                 self?.programmaticMove = true
                 map.setRegion(
                     MKCoordinateRegion(center: coord, latitudinalMeters: meters, longitudinalMeters: meters),
@@ -102,6 +110,24 @@ struct MapView: NSViewRepresentable {
             let point = gr.location(in: map)
             let coord = map.convert(point, toCoordinateFrom: map)
             parent.onTap(coord)
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: NSGestureRecognizer, shouldAttemptToRecognizeWith event: NSEvent) -> Bool {
+            guard let map = mapView else { return false }
+            let point = map.convert(event.locationInWindow, from: nil)
+            var hit = map.hitTest(map.convert(point, to: map.superview))
+            while let view = hit, view !== map {
+                if view is NSControl { return false }
+                hit = view.superview
+            }
+            return true
+        }
+
+        func mapView(_ mapView: MKMapView, didChange mode: MKUserTrackingMode, animated: Bool) {
+            if mode != .none {
+                // Let MapKit own the camera while its native locate mode is active.
+                parent.onPan()
+            }
         }
 
         func sync(waypoints: [Waypoint], current: CLLocationCoordinate2D?) {

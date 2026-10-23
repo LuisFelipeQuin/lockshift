@@ -34,6 +34,7 @@ struct ContentView: View {
                 MapView(waypoints: engine.waypoints,
                         currentCoordinate: displayedCoordinate,
                         locationTitle: "\(deviceFamily) location",
+                        locationAccessReady: macLocation.location != nil,
                         selectedCoordinate: selection,
                         controller: mapController, onTap: handleTap,
                         onPan: { following = false })
