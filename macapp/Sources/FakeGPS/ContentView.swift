@@ -25,6 +25,7 @@ struct ContentView: View {
     @State private var connectionAttempt = 0
     @State private var following = true
     @State private var advanced = false
+    @FocusState private var isPlaceSearchFocused: Bool
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -42,8 +43,8 @@ struct ContentView: View {
                         onPan: { following = false })
                 VStack(spacing: 12) {
                     deviceCard
-                    if devices.hasDevice && mode != .explore {
-                        Label(mode == .teleport ? "Choose or search a place, then click Move here" : "Click the map to add stops", systemImage: "hand.tap")
+                    if devices.hasDevice && mode == .route {
+                        Label("Click the map to add stops", systemImage: "hand.tap")
                             .font(.callout).padding(.horizontal, 16).padding(.vertical, 9)
                             .background(.regularMaterial, in: Capsule())
                     }
@@ -81,7 +82,10 @@ struct ContentView: View {
                 mode = .explore
             }
         }
-        .onChange(of: mode) { _, _ in search.clear() }
+        .onChange(of: mode) { _, newMode in
+            search.clear()
+            if newMode != .teleport { isPlaceSearchFocused = false }
+        }
         .onChange(of: sidecar.state.isReady) { _, ready in
             if !ready && !sidecar.isRestoring {
                 engine.clearRoute()
@@ -120,6 +124,78 @@ struct ContentView: View {
     }
 
     private var sidebar: some View {
+        ZStack {
+            if mode == .teleport {
+                placeSearchSidebar
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            } else if mode == .route {
+                routeSidebar
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            } else {
+                mainSidebar
+                    .transition(.move(edge: .leading).combined(with: .opacity))
+            }
+        }
+        .modifier(SidebarGlass())
+        .clipped()
+    }
+
+    private var placeSearchSidebar: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            sidebarBackButton
+
+            Text("Move to a place")
+                .font(.title2.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
+            sidebarPlaceSearch
+            if let error = sidecar.lastError {
+                Text(error).font(.caption).foregroundStyle(.orange)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var sidebarBackButton: some View {
+        Button {
+            isPlaceSearchFocused = false
+            search.clear()
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selection = nil
+                mode = .explore
+            }
+        } label: {
+            Label("Back", systemImage: "chevron.left")
+                .font(.callout.weight(.medium))
+                .padding(.vertical, 6)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Back to main menu")
+    }
+
+    private var routeSidebar: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            sidebarBackButton
+            Text("Build a route")
+                .font(.title2.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    routeControls
+                    if let error = sidecar.lastError {
+                        Text(error).font(.caption).foregroundStyle(.orange)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var mainSidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
                 Image(systemName: "location.fill")
@@ -152,10 +228,6 @@ struct ContentView: View {
                     }
                     modeSection("Your device", [.explore])
                     modeSection("Edit location", [.teleport, .route])
-                    if mode == .route {
-                        routeControls.padding(14)
-                            .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 18))
-                    }
                     if let restoreError { Text(restoreError).font(.caption).foregroundStyle(.orange) }
                     if let error = connectionError, devices.hasDevice {
                         VStack(alignment: .leading, spacing: 8) {
@@ -183,7 +255,6 @@ struct ContentView: View {
                 }
             }.padding(20)
         }
-        .modifier(SidebarGlass())
     }
 
     /// One titled group of sidebar modes. Splitting "Your device" from
@@ -195,15 +266,15 @@ struct ContentView: View {
                 .padding(.leading, 12).padding(.bottom, 4)
             ForEach(items) { item in
                 modeRow(item)
-                // The address field hangs off the row it acts on, so the place
-                // to type an address is wherever the user just clicked.
-                if item == .teleport, mode == .teleport { sidebarSearch }
             }
         }
     }
 
     private func modeRow(_ item: EditMode) -> some View {
-        Button { withAnimation(.easeInOut(duration: 0.2)) { selection = nil; mode = item } } label: {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { selection = nil; mode = item }
+            if item == .teleport { isPlaceSearchFocused = true }
+        } label: {
             HStack(spacing: 12) {
                 Image(systemName: item == .explore && deviceFamily == "iPad" ? "ipad" : icon(item))
                     .font(.system(size: 18, weight: .medium))
@@ -398,12 +469,18 @@ struct ContentView: View {
         mapController.center(on: coordinate, meters: span)
     }
 
-    private var sidebarSearch: some View {
+    private var sidebarPlaceSearch: some View {
         VStack(spacing: 6) {
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField("Search a place or address", text: $search.query)
                     .textFieldStyle(.plain)
+                    .focused($isPlaceSearchFocused)
+                    .onAppear { isPlaceSearchFocused = true }
+                    .onExitCommand {
+                        search.clear()
+                        isPlaceSearchFocused = false
+                    }
                     .onSubmit {
                         Task {
                             guard let item = await search.submit(near: mapController.currentCenter?())
@@ -416,32 +493,63 @@ struct ContentView: View {
                     }
                 if search.isSearching { ProgressView().controlSize(.small) }
                 if !search.query.isEmpty {
-                    Button { search.clear() } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain)
+                    Button {
+                        search.clear()
+                        isPlaceSearchFocused = true
+                    } label: { Image(systemName: "xmark.circle.fill") }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Clear search")
                 }
-            }.padding(14).background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
-            if !search.suggestions.isEmpty {
-                VStack(spacing: 0) {
-                    ForEach(Array(search.suggestions.prefix(6).enumerated()), id: \.offset) { _, item in
-                        Button {
-                            Task {
-                                guard let resolved = await search.resolve(item) else { return }
-                                go(to: resolved)
-                            }
-                        } label: {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(item.displayTitle).font(.callout.weight(.medium)).lineLimit(2)
-                                Text(item.displaySubtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                            }.frame(maxWidth: .infinity, alignment: .leading).padding(12).contentShape(Rectangle())
-                        }.buttonStyle(.plain)
-                    }
-                }.background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
             }
-        }.frame(maxWidth: .infinity)
+            .padding(16)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(isPlaceSearchFocused ? Color.accentColor.opacity(0.6) : Color.primary.opacity(0.1), lineWidth: 1)
+            }
+            ScrollView {
+                if !search.suggestions.isEmpty {
+                    VStack(spacing: 0) {
+                        ForEach(Array(search.suggestions.prefix(6).enumerated()), id: \.offset) { _, item in
+                            Button {
+                                Task {
+                                    guard let resolved = await search.resolve(item) else { return }
+                                    go(to: resolved)
+                                }
+                            } label: {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(item.displayTitle).font(.callout.weight(.medium)).lineLimit(2)
+                                    Text(item.displaySubtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                }.frame(maxWidth: .infinity, alignment: .leading).padding(12).contentShape(Rectangle())
+                            }.buttonStyle(.plain)
+                        }
+                    }
+                } else {
+                    VStack(spacing: 10) {
+                        Image(systemName: selection == nil ? "mappin.and.ellipse" : "mappin.circle")
+                            .font(.system(size: 28, weight: .light))
+                        Text(selection == nil
+                             ? "Search for a destination or choose a spot on the map."
+                             : "Click Move here on the map to use this destination.")
+                            .font(.callout)
+                            .multilineTextAlignment(.center)
+                    }
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 32)
+                }
+            }
+            .scrollIndicators(.hidden)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     /// Moves the map (and the current mode) to a search result, then clears the
     /// suggestion list.
     private func go(to item: MKMapItem) {
+        guard mode == .teleport, canSimulate else { return }
+        isPlaceSearchFocused = false
         following = false
         mapController.center(on: item.coordinate, meters: 1500)
         // Browsing the map is always allowed; picking a destination to push is
