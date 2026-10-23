@@ -50,6 +50,18 @@ for line in sys.stdin:
     }
 
     @MainActor
+    func testDeviceSwitchWaitsForPreviousHelperToExit() async throws {
+        let sidecar = try await makeSidecar(response: "ok")
+        defer { sidecar.stop() }
+        let start = ContinuousClock.now
+        let closed = await sidecar.disconnectAndWait()
+        XCTAssertTrue(closed)
+        XCTAssertEqual(sidecar.state, .stopped)
+        // The fixture spends 0.1 seconds clearing and 0.2 seconds closing.
+        XCTAssertGreaterThanOrEqual(start.duration(to: .now), .milliseconds(250))
+    }
+
+    @MainActor
     func testRejectedResetDoesNotReportSuccessOrCloseUsableSession() async throws {
         let sidecar = try await makeSidecar(response: "error")
         defer { sidecar.stop() }

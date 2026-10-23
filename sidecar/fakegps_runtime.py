@@ -34,13 +34,36 @@ def main() -> int:
 
         async def _list():
             from pymobiledevice3.usbmux import list_devices
-            out = []
-            for d in await list_devices():
-                out.append({
+            from pymobiledevice3.lockdown import create_using_usbmux
+
+            async def describe(d):
+                result = {
                     "serial": getattr(d, "serial", None),
                     "connection": getattr(d, "connection_type", None),
-                })
-            return out
+                }
+                if result["connection"] != "USB":
+                    return result
+                # Read device identity without opening a simulation session or
+                # generating a new Trust/pairing prompt during discovery.
+                try:
+                    async with asyncio.timeout(3):
+                        client = await create_using_usbmux(
+                            serial=result["serial"], connection_type="USB", autopair=False
+                        )
+                        try:
+                            values = client.all_values
+                            result.update(
+                                name=values.get("DeviceName"),
+                                product_type=values.get("ProductType"),
+                                product_version=values.get("ProductVersion"),
+                            )
+                        finally:
+                            await client.close()
+                except Exception:
+                    pass  # Keep an attached but locked/untrusted device selectable.
+                return result
+
+            return await asyncio.gather(*(describe(d) for d in await list_devices()))
 
         try:
             devices = asyncio.run(_list())

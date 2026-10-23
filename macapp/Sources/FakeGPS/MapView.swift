@@ -8,6 +8,7 @@ import SwiftUI
 struct MapView: NSViewRepresentable {
     var waypoints: [Waypoint]
     var currentCoordinate: CLLocationCoordinate2D?
+    var locationTitle: String
     var selectedCoordinate: CLLocationCoordinate2D?
     var controller: MapController
     /// Called with the map coordinate the user clicked.
@@ -70,7 +71,7 @@ struct MapView: NSViewRepresentable {
 
         init(_ parent: MapView) {
             self.parent = parent
-            currentAnnotation.title = "iPhone location"
+            currentAnnotation.title = parent.locationTitle
         }
 
         /// Expose map commands to SwiftUI through the shared MapController.
@@ -132,6 +133,8 @@ struct MapView: NSViewRepresentable {
 
             // Live simulated-position marker.
             if let current {
+                currentAnnotation.title = parent.locationTitle
+                map.view(for: currentAnnotation)?.setAccessibilityLabel(parent.locationTitle)
                 currentAnnotation.coordinate = current
                 if !hasCurrent {
                     map.addAnnotation(currentAnnotation)
@@ -209,7 +212,7 @@ struct MapView: NSViewRepresentable {
                 view.canShowCallout = true
                 view.displayPriority = .required
                 view.collisionMode = .circle
-                view.setAccessibilityLabel("iPhone location")
+                view.setAccessibilityLabel(parent.locationTitle)
                 return view
             }
 

@@ -39,6 +39,16 @@ final class AppConfig: ObservableObject {
         case let .bundled(bin):
             return (bin, [mode])
         case let .dev(python, script):
+            // Use edited discovery/helper sources in development without copying
+            // files into the user's installed runtime. The privileged daemon
+            // still uses its existing path outside Documents (macOS TCC).
+            let sourceRuntime = URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent().deletingLastPathComponent()
+                .deletingLastPathComponent().deletingLastPathComponent()
+                .appendingPathComponent("sidecar/fakegps_runtime.py")
+            if mode != "tunneld", FileManager.default.fileExists(atPath: sourceRuntime.path) {
+                return (python, [sourceRuntime.path, mode])
+            }
             return (python, [script.path, mode])
         }
     }

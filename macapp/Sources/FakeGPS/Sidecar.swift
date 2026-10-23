@@ -15,14 +15,18 @@ struct DeviceInfo: Identifiable, Hashable, Codable {
         return "\(name ?? model)\(os)"
     }
 
+    var isIPhone: Bool { productType?.hasPrefix("iPhone") == true }
+    var isIPad: Bool { productType?.hasPrefix("iPad") == true }
+    var family: String { isIPad ? "iPad" : (isIPhone ? "iPhone" : "Device") }
+    var modelName: String { DeviceModel.name(for: productType) ?? name ?? productType ?? "USB device" }
+    var selectionLabel: String {
+        let label = name.flatMap { $0.isEmpty || $0 == modelName ? nil : $0 }
+        return label.map { "\(modelName) — \($0)" } ?? modelName
+    }
     var usbConnectionDescription: String {
-        // Hardware identifier reported by the connected iPhone 16 Pro.
-        // Preserve the reported identity for models we have not mapped.
-        let model = productType == "iPhone17,1"
-            ? "iPhone 16 Pro" : (name ?? productType ?? "iPhone")
-        var parts = [model]
+        var parts = [modelName]
         if let version = productVersion, !version.isEmpty {
-            parts.append("iOS \(version)")
+            parts.append("\(isIPad ? "iPadOS" : "iOS") \(version)")
         }
         parts.append("USB connected")
         return parts.joined(separator: " · ")
@@ -58,6 +62,7 @@ final class Sidecar: ObservableObject {
     var argsPrefix: [String]
 
     private var process: Process?
+    private var retiringProcesses: [Process] = []
     private var stdinPipe: Pipe?
     private var stdoutBuffer = Data()
     private var messageID = 0
@@ -130,7 +135,9 @@ final class Sidecar: ObservableObject {
     }
 
     func stop() {
+        retiringProcesses.removeAll { !$0.isRunning }
         if let proc = process, proc.isRunning {
+            retiringProcesses.append(proc)
             // Reset the device to real GPS first, then ask the helper to quit.
             // Don't SIGTERM immediately — that races the clear. Close stdin so it
             // exits cleanly, and force-kill only if it lingers.
@@ -142,6 +149,17 @@ final class Sidecar: ObservableObject {
             }
         }
         resetState()
+    }
+
+    /// Switching targets must not leave two helper sessions running at once.
+    func disconnectAndWait() async -> Bool {
+        stop()
+        let deadline = Date().addingTimeInterval(5)
+        while retiringProcesses.contains(where: { $0.isRunning }) && Date() < deadline {
+            do { try await Task.sleep(for: .milliseconds(100)) } catch { return false }
+        }
+        retiringProcesses.removeAll { !$0.isRunning }
+        return retiringProcesses.isEmpty
     }
 
     /// Blocking cleanup used on app termination: clear the location and wait

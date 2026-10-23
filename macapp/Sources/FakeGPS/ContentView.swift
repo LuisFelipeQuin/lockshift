@@ -33,6 +33,7 @@ struct ContentView: View {
             ZStack(alignment: .top) {
                 MapView(waypoints: engine.waypoints,
                         currentCoordinate: displayedCoordinate,
+                        locationTitle: "\(deviceFamily) location",
                         selectedCoordinate: selection,
                         controller: mapController, onTap: handleTap,
                         onPan: { following = false })
@@ -71,15 +72,18 @@ struct ContentView: View {
         .onChange(of: displayedCoordinate.map { [$0.latitude, $0.longitude] }) { _, _ in
             centerOnDisplayedLocation()
         }
-        .onChange(of: devices.hasDevice, initial: true) { _, connected in
-            if connected {
+        .onChange(of: devices.connectedUDID, initial: true) { _, udid in
+            engine.stop()
+            selection = nil
+            mode = .explore
+            restoreError = nil
+            if udid != nil {
                 following = true
                 macLocation.request()
                 centerOnDisplayedLocation()
             } else {
                 macLocation.cancel()
                 engine.clearRoute()
-                sidecar.stop()
                 selection = nil
                 mode = .explore
             }
@@ -102,6 +106,19 @@ struct ContentView: View {
             }.padding(22)
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
+                    if !devices.connectedDevices.isEmpty {
+                        Picker("Device", selection: Binding(
+                            get: { devices.connectedUDID ?? "" },
+                            set: { devices.select($0) }
+                        )) {
+                            ForEach(devices.connectedDevices) { device in
+                                Text(device.selectionLabel + " · " + String(device.udid.suffix(4)))
+                                    .tag(device.udid)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .disabled(sidecar.isRestoring)
+                    }
                     sidebarSearch.disabled(!canSimulate)
                     VStack(alignment: .leading, spacing: 6) {
                         Text("EXPLORE").font(.caption2.weight(.semibold)).foregroundStyle(.secondary).padding(.bottom, 4)
@@ -109,7 +126,7 @@ struct ContentView: View {
                             Button { withAnimation(.easeInOut(duration: 0.2)) { selection = nil; mode = item } } label: {
                                 HStack(spacing: 12) {
                                     Image(systemName: icon(item)).frame(width: 20)
-                                    Text(item.rawValue)
+                                    Text(item == .explore ? "My \(deviceFamily)" : item.rawValue)
                                     Spacer()
                                     if mode == item { Image(systemName: "chevron.right").font(.caption.weight(.bold)) }
                                 }
@@ -154,17 +171,17 @@ struct ContentView: View {
 
     private var deviceCard: some View {
         HStack(spacing: 12) {
-            Image(systemName: devices.hasDevice ? "iphone" : "iphone.slash")
+            Image(systemName: devices.hasDevice ? (deviceFamily == "iPad" ? "ipad" : "iphone") : "iphone.slash")
                 .font(.system(size: 26, weight: .light))
                 .foregroundStyle(devices.hasDevice ? Color.accentColor : .secondary)
             VStack(alignment: .leading, spacing: 4) {
-                Text(devices.hasDevice ? "iPhone connected" : "No iPhone connected")
+                Text(devices.hasDevice ? "\(deviceFamily) connected" : "No device connected")
                     .font(.headline)
                 if !devices.hasDevice {
-                    Text("Connect your iPhone with a USB cable.")
+                    Text("Connect your iPhone or iPad with a USB cable.")
                         .font(.caption).foregroundStyle(.secondary)
                 } else if displayedCoordinate != nil {
-                    Text("iPhone location")
+                    Text("\(deviceFamily) location")
                         .font(.caption).foregroundStyle(.secondary)
                 } else {
                     HStack(spacing: 8) {
@@ -173,7 +190,9 @@ struct ContentView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if !macLocation.isLocating {
-                        Button("Try again") { macLocation.request() }.font(.caption)
+                        Button(macLocation.needsLocationSettings ? "Open Location Settings" : "Try again") {
+                            macLocation.retry()
+                        }.font(.caption)
                     }
                 }
             }
@@ -198,23 +217,38 @@ struct ContentView: View {
         }
     }
 
-    private var canSimulate: Bool { devices.hasDevice && sidecar.state.isReady && !sidecar.isRestoring }
+    private var deviceFamily: String { devices.selectedDevice?.family ?? "Device" }
+
+    private var canSimulate: Bool {
+        guard !sidecar.isRestoring, let selected = devices.connectedUDID,
+              case let .ready(device) = sidecar.state else { return false }
+        return device.udid == selected
+    }
 
     private var connectionStatus: String {
-        if !devices.hasDevice { return "Connect your iPhone to get started" }
+        if !devices.hasDevice { return "Connect an iPhone or iPad to get started" }
         if sidecar.isRestoring { return "Restoring location…" }
         if canSimulate, case let .ready(device) = sidecar.state {
-            return device.usbConnectionDescription
+            let selected = devices.selectedDevice
+            return DeviceInfo(udid: device.udid, name: selected?.name ?? device.name,
+                              productType: selected?.productType ?? device.productType,
+                              productVersion: selected?.productVersion ?? device.productVersion)
+                .usbConnectionDescription
         }
         if connectionError != nil { return "Connection needs attention" }
-        return tunnel.isStarting ? "Starting device connection…" : "Connecting to iPhone…"
+        return tunnel.isStarting ? "Starting device connection…" : "Connecting to device…"
     }
 
     @MainActor
     private func connectAutomatically() async {
         connectionError = nil
+        engine.stop()
+        guard await sidecar.disconnectAndWait(), !Task.isCancelled else {
+            if !Task.isCancelled { connectionError = "The previous device connection is still closing. Try again." }
+            return
+        }
+        engine.clearRoute()
         guard let udid = devices.connectedUDID else { return }
-        sidecar.stop()
         guard config.isValid else {
             connectionError = "The simulation runtime is missing. Reinstall the app’s runtime."
             return
@@ -233,6 +267,8 @@ struct ContentView: View {
         while failedAttempts < 3 {
             guard !Task.isCancelled, devices.connectedUDID == udid else { return }
             var wasReady = false
+            guard await sidecar.disconnectAndWait(), !Task.isCancelled,
+                  devices.connectedUDID == udid else { return }
             sidecar.start(udid: udid)
             for _ in 0..<40 {
                 do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
@@ -259,12 +295,12 @@ struct ContentView: View {
                 do { try await Task.sleep(for: .seconds(2)) } catch { return }
             }
         }
-        connectionError = sidecar.lastError ?? "Couldn’t connect. Unlock your iPhone, trust this Mac, and check Developer Mode."
+        connectionError = sidecar.lastError ?? "Couldn’t connect. Unlock your device, trust this Mac, and check Developer Mode."
         sidecar.stop()
     }
 
     private var hasSimulatedLocation: Bool {
-        sidecar.state.isReady && engine.currentCoordinate != nil
+        canSimulate && engine.currentCoordinate != nil
     }
 
     private var displayedCoordinate: CLLocationCoordinate2D? {

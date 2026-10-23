@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import CoreLocation
 import Foundation
@@ -9,10 +10,24 @@ final class MacLocation: NSObject, ObservableObject {
     @Published private(set) var location: CLLocation?
     @Published private(set) var isLocating = false
     @Published private(set) var message = ""
+    @Published private(set) var needsLocationSettings = false
 
     private var manager: CLLocationManager?
     private var timeout: Task<Void, Never>?
     private var requestedFix = false
+
+    func retry() {
+        guard needsLocationSettings else {
+            request()
+            return
+        }
+        // macOS cannot repeat the permission prompt after access was denied.
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices") {
+            if !NSWorkspace.shared.open(url) {
+                message = "Open System Settings → Privacy & Security → Location Services to allow iOS Fake GPS."
+            }
+        }
+    }
 
     func request() {
         cancel()
@@ -32,18 +47,27 @@ final class MacLocation: NSObject, ObservableObject {
         manager?.delegate = nil
         manager = nil
         requestedFix = false
+        needsLocationSettings = false
         location = nil
         isLocating = false
         message = ""
     }
 
     private func updateAuthorization(_ manager: CLLocationManager) {
-        guard self.manager === manager, isLocating else { return }
+        guard self.manager === manager, isLocating || needsLocationSettings else { return }
         switch manager.authorizationStatus {
         case .notDetermined:
+            needsLocationSettings = false
+            isLocating = true
             message = "Allow location access to find this Mac."
             manager.requestWhenInUseAuthorization()
         case .authorizedAlways, .authorizedWhenInUse:
+            // Resume automatically if access was enabled in System Settings.
+            if needsLocationSettings {
+                requestedFix = false
+                needsLocationSettings = false
+                isLocating = true
+            }
             guard !requestedFix else { return }
             requestedFix = true
             message = "Finding this Mac’s location…"
@@ -54,6 +78,7 @@ final class MacLocation: NSObject, ObservableObject {
                 self.fail("Couldn’t find this Mac. Check Location Services and try again.")
             }
         case .denied, .restricted:
+            needsLocationSettings = true
             fail("Allow iOS Fake GPS in System Settings → Privacy & Security → Location Services.")
         @unknown default:
             fail("This Mac’s location is unavailable.")
@@ -97,6 +122,7 @@ extension MacLocation: CLLocationManagerDelegate {
         Task { @MainActor in
             guard self.manager === manager, self.isLocating else { return }
             if (error as? CLError)?.code == .denied {
+                self.needsLocationSettings = true
                 self.fail("Allow iOS Fake GPS in System Settings → Privacy & Security → Location Services.")
             } else {
                 self.fail("Couldn’t find this Mac’s location. Try again.")
