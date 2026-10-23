@@ -311,7 +311,6 @@ final class DestinationMapView: MKMapView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        Self.trace("attached window=\(String(describing: window?.windowNumber))")
         if let zoomMonitor {
             NSEvent.removeMonitor(zoomMonitor)
             self.zoomMonitor = nil
@@ -320,14 +319,12 @@ final class DestinationMapView: MKMapView {
         // MapKit's internal subviews can consume scroll events before responder
         // overrides run. Scope this monitor to events hit-tested to this map.
         zoomMonitor = NSEvent.addLocalMonitorForEvents(matching: [.magnify, .scrollWheel]) { [weak self] event in
-            Self.trace("event=\(event.type.rawValue) eventWindow=\(String(describing: event.window?.windowNumber)) keyWindow=\(String(describing: NSApp.keyWindow?.windowNumber)) mapWindow=\(String(describing: self?.window?.windowNumber))")
-            Self.trace("zoomEnabled=\(String(describing: self?.isZoomEnabled)) dx=\(event.deltaX) dy=\(event.deltaY) scrollingX=\(event.scrollingDeltaX) scrollingY=\(event.scrollingDeltaY)")
             guard let self, self.isZoomEnabled, let window = self.window,
                   Self.isZoomEventWindow(event.window, mapWindow: window, keyWindow: NSApp.keyWindow) else { return event }
             // Gesture events may have no associated window yet. In that case,
             // their locationInWindow is not a coordinate in this map's window.
             let point = event.window == nil ? window.mouseLocationOutsideOfEventStream : event.locationInWindow
-            guard self.acceptsZoom(atWindowPoint: point) else { Self.trace("hit rejected"); return event }
+            guard self.acceptsZoom(atWindowPoint: point) else { return event }
 
             let factor: Double
             if event.type == .magnify {
@@ -342,22 +339,10 @@ final class DestinationMapView: MKMapView {
             self.setUserTrackingMode(.none, animated: false)
             let camera = self.camera.copy() as! MKMapCamera
             camera.centerCoordinateDistance = min(40_000_000, max(20, camera.centerCoordinateDistance / factor))
-            Self.trace("factor=\(factor) before=\(self.camera.centerCoordinateDistance) target=\(camera.centerCoordinateDistance)")
             self.setCamera(camera, animated: false)
-            Self.trace("after=\(self.camera.centerCoordinateDistance)")
             // Consume once so MapKit cannot apply a second zoom or scroll-pan.
             return nil
         }
-    }
-
-    private static func trace(_ message: String) {
-        let url = URL(fileURLWithPath: "/tmp/fakegps-trackpad.log")
-        let data = Data((message + "\n").utf8)
-        if let file = try? FileHandle(forWritingTo: url) {
-            defer { try? file.close() }
-            _ = try? file.seekToEnd()
-            try? file.write(contentsOf: data)
-        } else { try? data.write(to: url) }
     }
 
     static func isZoomEventWindow(_ eventWindow: NSWindow?, mapWindow: NSWindow, keyWindow: NSWindow?) -> Bool {
@@ -371,7 +356,6 @@ final class DestinationMapView: MKMapView {
         let hitPoint = content.superview?.convert(point, from: nil) ?? point
         var hit = content.hitTest(hitPoint)
         while let view = hit, view !== self {
-            Self.trace("hit=\(type(of: view))")
             if view is NSControl || view is NSHostingView<DestinationCard> { return false }
             hit = view.superview
         }
