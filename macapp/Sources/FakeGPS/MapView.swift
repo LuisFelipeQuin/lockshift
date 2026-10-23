@@ -9,6 +9,9 @@ struct MapView: NSViewRepresentable {
     var waypoints: [Waypoint]
     var currentCoordinate: CLLocationCoordinate2D?
     var locationTitle: String
+    /// Where the device really is, passed only while a pushed location is
+    /// active. Drawn as a grey dot so the spot being overridden stays visible.
+    var realCoordinate: CLLocationCoordinate2D?
     var locationAccessReady: Bool
     var selectedCoordinate: CLLocationCoordinate2D?
     var canMoveToSelection: Bool
@@ -61,10 +64,13 @@ struct MapView: NSViewRepresentable {
 
     func updateNSView(_ map: MKMapView, context: Context) {
         context.coordinator.parent = self
-        if map.showsUserLocation != locationAccessReady {
-            map.showsUserLocation = locationAccessReady
+        // While overriding, our own grey dot marks the real spot, so MapKit's
+        // native blue one at that same point would just be a duplicate.
+        let showsNativeDot = locationAccessReady && realCoordinate == nil
+        if map.showsUserLocation != showsNativeDot {
+            map.showsUserLocation = showsNativeDot
         }
-        context.coordinator.sync(waypoints: waypoints, current: currentCoordinate)
+        context.coordinator.sync(waypoints: waypoints, current: currentCoordinate, real: realCoordinate)
         context.coordinator.syncSelection(selectedCoordinate)
     }
 
@@ -76,6 +82,8 @@ struct MapView: NSViewRepresentable {
         private var routeOverlay: MKPolyline?
         private let currentAnnotation = MKPointAnnotation()
         private var hasCurrent = false
+        private let realAnnotation = MKPointAnnotation()
+        private var hasReal = false
         private let selectionAnnotation = MKPointAnnotation()
         private var destinationCard: NSHostingView<DestinationCard>?
         private var previousWaypoints: [UUID] = []
@@ -155,7 +163,7 @@ struct MapView: NSViewRepresentable {
             }
         }
 
-        func sync(waypoints: [Waypoint], current: CLLocationCoordinate2D?) {
+        func sync(waypoints: [Waypoint], current: CLLocationCoordinate2D?, real: CLLocationCoordinate2D?) {
             guard let map = mapView else { return }
 
             // Rebuild route geometry only when the stops change, not every GPS tick.
@@ -194,6 +202,19 @@ struct MapView: NSViewRepresentable {
             } else if hasCurrent {
                 map.removeAnnotation(currentAnnotation)
                 hasCurrent = false
+            }
+
+            // Grey marker for the position being overridden.
+            if let real {
+                realAnnotation.title = "Real location"
+                realAnnotation.coordinate = real
+                if !hasReal {
+                    map.addAnnotation(realAnnotation)
+                    hasReal = true
+                }
+            } else if hasReal {
+                map.removeAnnotation(realAnnotation)
+                hasReal = false
             }
         }
 
@@ -256,24 +277,30 @@ struct MapView: NSViewRepresentable {
             return MKOverlayRenderer(overlay: overlay)
         }
 
-        /// A centered blue location dot with a white edge and soft halo.
-        /// This is a custom annotation, so it can also represent a simulated position.
-        private static let locationDot = NSImage(size: NSSize(width: 44, height: 44), flipped: false) { _ in
-            NSColor.systemBlue.withAlphaComponent(0.14).setFill()
-            NSBezierPath(ovalIn: NSRect(x: 2, y: 2, width: 40, height: 40)).fill()
-            NSGraphicsContext.saveGraphicsState()
-            let shadow = NSShadow()
-            shadow.shadowColor = NSColor.black.withAlphaComponent(0.2)
-            shadow.shadowBlurRadius = 3
-            shadow.shadowOffset = NSSize(width: 0, height: -1)
-            shadow.set()
-            NSColor.white.setFill()
-            NSBezierPath(ovalIn: NSRect(x: 11, y: 11, width: 22, height: 22)).fill()
-            NSGraphicsContext.restoreGraphicsState()
-            NSColor.systemBlue.setFill()
-            NSBezierPath(ovalIn: NSRect(x: 14, y: 14, width: 16, height: 16)).fill()
-            return true
+        /// A centered location dot with a white edge and soft halo.
+        private static func locationDot(_ tint: NSColor) -> NSImage {
+            NSImage(size: NSSize(width: 44, height: 44), flipped: false) { _ in
+                tint.withAlphaComponent(0.14).setFill()
+                NSBezierPath(ovalIn: NSRect(x: 2, y: 2, width: 40, height: 40)).fill()
+                NSGraphicsContext.saveGraphicsState()
+                let shadow = NSShadow()
+                shadow.shadowColor = NSColor.black.withAlphaComponent(0.2)
+                shadow.shadowBlurRadius = 3
+                shadow.shadowOffset = NSSize(width: 0, height: -1)
+                shadow.set()
+                NSColor.white.setFill()
+                NSBezierPath(ovalIn: NSRect(x: 11, y: 11, width: 22, height: 22)).fill()
+                NSGraphicsContext.restoreGraphicsState()
+                tint.setFill()
+                NSBezierPath(ovalIn: NSRect(x: 14, y: 14, width: 16, height: 16)).fill()
+                return true
+            }
         }
+
+        /// Blue is the location the device is reporting right now; grey is the
+        /// real position it has been overridden with.
+        private static let activeDot = locationDot(.systemBlue)
+        private static let overriddenDot = locationDot(.systemGray)
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
             if annotation === selectionAnnotation {
@@ -293,12 +320,26 @@ struct MapView: NSViewRepresentable {
                 let view = mapView.dequeueReusableAnnotationView(withIdentifier: id)
                     ?? MKAnnotationView(annotation: annotation, reuseIdentifier: id)
                 view.annotation = annotation
-                view.image = Self.locationDot
+                view.image = Self.activeDot
                 view.centerOffset = .zero
                 view.canShowCallout = true
                 view.displayPriority = .required
                 view.collisionMode = .circle
                 view.setAccessibilityLabel(parent.locationTitle)
+                return view
+            }
+
+            if annotation === realAnnotation {
+                let id = "real"
+                let view = mapView.dequeueReusableAnnotationView(withIdentifier: id)
+                    ?? MKAnnotationView(annotation: annotation, reuseIdentifier: id)
+                view.annotation = annotation
+                view.image = Self.overriddenDot
+                view.centerOffset = .zero
+                view.canShowCallout = true
+                view.displayPriority = .required
+                view.collisionMode = .circle
+                view.setAccessibilityLabel("Real location")
                 return view
             }
 

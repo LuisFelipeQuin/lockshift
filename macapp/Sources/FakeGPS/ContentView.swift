@@ -32,6 +32,7 @@ struct ContentView: View {
                 MapView(waypoints: engine.waypoints,
                         currentCoordinate: displayedCoordinate,
                         locationTitle: "\(deviceFamily) location",
+                        realCoordinate: hasSimulatedLocation ? macLocation.location?.coordinate : nil,
                         locationAccessReady: macLocation.location != nil,
                         selectedCoordinate: mode == .teleport ? selection : nil,
                         canMoveToSelection: canSimulate,
@@ -42,7 +43,7 @@ struct ContentView: View {
                 VStack(spacing: 12) {
                     deviceCard
                     if devices.hasDevice && mode != .explore {
-                        Label(mode == .teleport ? "Choose a place, then click Move here" : "Click the map to add stops", systemImage: "hand.tap")
+                        Label(mode == .teleport ? "Choose or search a place, then click Move here" : "Click the map to add stops", systemImage: "hand.tap")
                             .font(.callout).padding(.horizontal, 16).padding(.vertical, 9)
                             .background(.regularMaterial, in: Capsule())
                     }
@@ -234,8 +235,7 @@ struct ContentView: View {
                     Text("Connect your iPhone or iPad with a USB cable.")
                         .font(.caption).foregroundStyle(.secondary)
                 } else if displayedCoordinate != nil {
-                    Text("\(deviceFamily) location")
-                        .font(.caption).foregroundStyle(.secondary)
+                    locationStatus
                 } else {
                     HStack(spacing: 8) {
                         if macLocation.isLocating { ProgressView().controlSize(.small) }
@@ -252,6 +252,37 @@ struct ContentView: View {
         }
         .padding(16)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    /// Green while the device still reports where it really is, orange once we
+    /// have pushed a location of our own — the one thing a user needs to know at
+    /// a glance is whether what they see on the map is real.
+    private var locationStatus: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(hasSimulatedLocation ? Color.orange : Color.green)
+                    .frame(width: 7, height: 7)
+                Text(hasSimulatedLocation ? "Location edited" : "Real location")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(hasSimulatedLocation ? Color.orange : .secondary)
+            }
+            if hasSimulatedLocation {
+                Text(engine.playback == .playing
+                     ? "\(deviceFamily) is following your route, not where it really is."
+                     : "\(deviceFamily) is reporting the place you set, not where it really is.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(sidecar.isRestoring ? "Restoring location…" : "Restore real location") {
+                    Task { await restoreLocation() }
+                }
+                .buttonStyle(.plain)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(sidecar.isRestoring ? Color.secondary : Color.blue)
+                .disabled(sidecar.isRestoring)
+                .padding(.top, 2)
+            }
+        }
     }
 
     @MainActor
