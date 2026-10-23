@@ -7,6 +7,8 @@ import SwiftUI
 /// route polyline, and shows a live marker at the simulated position.
 struct MapView: NSViewRepresentable {
     var waypoints: [Waypoint]
+    var routeStart: RoutePlace?
+    var routeEnd: RoutePlace?
     var currentCoordinate: CLLocationCoordinate2D?
     var locationTitle: String
     /// Where the device really is, passed only while a pushed location is
@@ -71,6 +73,7 @@ struct MapView: NSViewRepresentable {
             map.showsUserLocation = showsNativeDot
         }
         context.coordinator.sync(waypoints: waypoints, current: currentCoordinate, real: realCoordinate)
+        context.coordinator.syncRouteEndpoints()
         context.coordinator.syncSelection(selectedCoordinate)
     }
 
@@ -87,6 +90,7 @@ struct MapView: NSViewRepresentable {
         private let selectionAnnotation = MKPointAnnotation()
         private var destinationCard: NSHostingView<DestinationCard>?
         private var previousWaypoints: [UUID] = []
+        private var previousEndpoints: [RoutePlace?] = [nil, nil]
 
         init(_ parent: MapView) {
             self.parent = parent
@@ -169,15 +173,6 @@ struct MapView: NSViewRepresentable {
             // Rebuild route geometry only when the stops change, not every GPS tick.
             if previousWaypoints != waypoints.map(\.id) {
                 previousWaypoints = waypoints.map(\.id)
-                let existing = map.annotations.compactMap { $0 as? WaypointAnnotation }
-                map.removeAnnotations(existing)
-                for (i, wp) in waypoints.enumerated() {
-                    let a = WaypointAnnotation()
-                    a.coordinate = wp.coordinate
-                    a.title = "\(i + 1)"
-                    map.addAnnotation(a)
-                }
-
                 // Route polyline.
                 if let old = routeOverlay { map.removeOverlay(old) }
                 if waypoints.count >= 2 {
@@ -216,6 +211,44 @@ struct MapView: NSViewRepresentable {
                 map.removeAnnotation(realAnnotation)
                 hasReal = false
             }
+        }
+
+        func syncRouteEndpoints() {
+            guard let map = mapView else { return }
+            let endpoints = [parent.routeStart, parent.routeEnd]
+            guard endpoints != previousEndpoints else { return }
+            previousEndpoints = endpoints
+            map.removeAnnotations(map.annotations.compactMap { $0 as? WaypointAnnotation })
+            map.addAnnotations(Self.endpointAnnotations(endpoints))
+            let coordinates = endpoints.compactMap { $0?.coordinate }
+            guard let bounds = Self.routeBounds(coordinates) else { return }
+            map.setUserTrackingMode(.none, animated: false)
+            // Reserve room for the sidebar, top status card, and marker heads.
+            map.setVisibleMapRect(bounds,
+                                  edgePadding: NSEdgeInsets(top: 180, left: 370, bottom: 80, right: 80),
+                                  animated: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+        }
+
+        static func endpointAnnotations(_ endpoints: [RoutePlace?]) -> [WaypointAnnotation] {
+            endpoints.enumerated().compactMap { index, place in
+                guard let place else { return nil }
+                let annotation = WaypointAnnotation()
+                annotation.isStart = index == 0
+                annotation.coordinate = place.coordinate
+                annotation.title = index == 0 ? "Starting point" : "Destination"
+                annotation.subtitle = place.title
+                return annotation
+            }
+        }
+
+        static func routeBounds(_ coordinates: [CLLocationCoordinate2D]) -> MKMapRect? {
+            guard let first = coordinates.first else { return nil }
+            let line = MKPolyline(coordinates: coordinates, count: coordinates.count)
+            let bounds = line.boundingMapRect
+            // A single endpoint (or very short route) still needs a useful zoom.
+            let minimum = 800 * MKMapPointsPerMeterAtLatitude(first.latitude)
+            return bounds.insetBy(dx: -max(0, (minimum - bounds.width) / 2),
+                                  dy: -max(0, (minimum - bounds.height) / 2))
         }
 
         func syncSelection(_ selected: CLLocationCoordinate2D?) {
@@ -343,13 +376,20 @@ struct MapView: NSViewRepresentable {
                 return view
             }
 
-            if annotation is WaypointAnnotation {
+            if let endpoint = annotation as? WaypointAnnotation {
                 let id = "wp"
                 let v = mapView.dequeueReusableAnnotationView(withIdentifier: id) as? MKMarkerAnnotationView
                     ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: id)
                 v.annotation = annotation
-                v.markerTintColor = .systemBlue
-                v.glyphText = (annotation as? WaypointAnnotation)?.title ?? ""
+                v.markerTintColor = endpoint.isStart ? .systemRed : .darkGray
+                v.glyphText = nil
+                v.glyphImage = NSImage(systemSymbolName: endpoint.isStart ? "mappin" : "flag.checkered",
+                                       accessibilityDescription: endpoint.isStart ? "Starting point" : "Destination")
+                v.glyphTintColor = .white
+                v.displayPriority = .required
+                v.titleVisibility = .visible
+                v.canShowCallout = true
+                v.setAccessibilityLabel(endpoint.isStart ? "Starting point" : "Destination")
                 return v
             }
             return nil
@@ -358,7 +398,9 @@ struct MapView: NSViewRepresentable {
 }
 
 /// Distinguishes user-placed waypoints from the live position marker.
-final class WaypointAnnotation: MKPointAnnotation {}
+final class WaypointAnnotation: MKPointAnnotation {
+    var isStart = false
+}
 
 final class DestinationMapView: MKMapView {
     var onLayout: (() -> Void)?

@@ -26,12 +26,16 @@ struct ContentView: View {
     @State private var connectionAttempt = 0
     @State private var following = true
     @State private var advanced = false
+    @State private var routeStart: RoutePlace?
+    @State private var routeEnd: RoutePlace?
+    @State private var useCurrentLocation = false
     @FocusState private var isPlaceSearchFocused: Bool
 
     var body: some View {
         ZStack(alignment: .leading) {
             ZStack(alignment: .top) {
                 MapView(waypoints: engine.waypoints,
+                        routeStart: routeStart, routeEnd: routeEnd,
                         currentCoordinate: displayedCoordinate,
                         locationTitle: "\(deviceFamily) location",
                         realCoordinate: hasSimulatedLocation ? macLocation.location?.coordinate : nil,
@@ -45,7 +49,7 @@ struct ContentView: View {
                 VStack(spacing: 12) {
                     deviceCard
                     if devices.hasDevice && mode == .route {
-                        Label("Click the map to add stops", systemImage: "hand.tap")
+                        Label("Choose a starting point and destination in the sidebar", systemImage: "hand.tap")
                             .font(.callout).padding(.horizontal, 16).padding(.vertical, 9)
                             .background(.regularMaterial, in: Capsule())
                     }
@@ -83,18 +87,20 @@ struct ContentView: View {
                 centerOnDisplayedLocation()
             } else {
                 macLocation.cancel()
-                engine.clearRoute()
+                clearRouteDraft()
                 selection = nil
                 mode = .explore
             }
         }
+        .onChange(of: routeStart) { _, _ in updateRouteEndpoints() }
+        .onChange(of: routeEnd) { _, _ in updateRouteEndpoints() }
         .onChange(of: mode) { _, newMode in
             search.clear()
             if newMode != .teleport { isPlaceSearchFocused = false }
         }
         .onChange(of: sidecar.state.isReady) { _, ready in
             if !ready && !sidecar.isRestoring {
-                engine.clearRoute()
+                clearRouteDraft()
                 selection = nil
                 mode = .explore
             }
@@ -188,6 +194,7 @@ struct ContentView: View {
                 .accessibilityAddTraits(.isHeader)
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    routeEndpoints
                     routeControls
                     if let error = sidecar.lastError {
                         Text(error).font(.caption).foregroundStyle(.orange)
@@ -369,7 +376,7 @@ struct ContentView: View {
         selection = nil
         restoreError = nil
         if await sidecar.restoreLocation() {
-            engine.clearRoute()
+            clearRouteDraft()
             mode = .explore
             following = true
             if devices.hasDevice { macLocation.request() }
@@ -409,7 +416,7 @@ struct ContentView: View {
             if !Task.isCancelled { connectionError = "The previous device connection is still closing. Try again." }
             return
         }
-        engine.clearRoute()
+        clearRouteDraft()
         guard let udid = devices.connectedUDID else { return }
         guard config.isValid else {
             connectionError = "The simulation runtime is missing. Reinstall the app’s runtime."
@@ -559,39 +566,92 @@ struct ContentView: View {
         isPlaceSearchFocused = false
         following = false
         mapController.center(on: item.coordinate, meters: 1500)
-        // Browsing the map is always allowed; picking a destination to push is
-        // not, so leave the mode alone until a device is actually connected.
-        if canSimulate {
-            if mode == .route { engine.addWaypoint(item.coordinate) }
-            else { mode = .teleport; selection = item.coordinate }
-        }
+        selection = item.coordinate
         search.clear()
+    }
+
+    private var routeEndpoints: some View {
+        VStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 12) {
+                if useCurrentLocation {
+                    Text("Starting point")
+                        .font(.subheadline.weight(.semibold))
+                    Text(routeStart?.title ?? "Current location unavailable")
+                        .font(.callout)
+                } else {
+                    RoutePlaceField(title: "Starting point", place: $routeStart,
+                                    near: mapController.currentCenter?())
+                }
+                Toggle("Use current location", isOn: Binding(
+                    get: { useCurrentLocation },
+                    set: { enabled in
+                        useCurrentLocation = enabled
+                        if enabled, let coordinate = displayedCoordinate {
+                            routeStart = RoutePlace(title: "Current location", coordinate: coordinate)
+                        } else { routeStart = nil }
+                    }
+                ))
+                .toggleStyle(.checkbox)
+                .font(.callout)
+                .disabled(displayedCoordinate == nil && !useCurrentLocation)
+                if displayedCoordinate == nil {
+                    Text("Current location is unavailable. Search for a starting address.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else if useCurrentLocation {
+                    Text(hasSimulatedLocation ? "Uses the location currently shown in the app." : "Uses this Mac’s approximate location.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 16))
+
+            RoutePlaceField(title: "Destination", place: $routeEnd,
+                            near: routeStart?.coordinate ?? mapController.currentCenter?())
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 16))
+            if routeStart != nil && routeEnd != nil && engine.totalDistance < 1 {
+                Text("Choose a destination different from your starting point.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func updateRouteEndpoints() {
+        engine.stop()
+        if routeStart != nil || routeEnd != nil { following = false }
+        guard let start = routeStart, let end = routeEnd else {
+            engine.waypoints = []
+            return
+        }
+        engine.waypoints = [Waypoint(coordinate: start.coordinate), Waypoint(coordinate: end.coordinate)]
+    }
+
+    private func clearRouteDraft() {
+        routeStart = nil
+        routeEnd = nil
+        useCurrentLocation = false
+        engine.clearRoute()
     }
 
     private var routeControls: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("Your route").font(.headline)
-                Spacer()
-                Text("\(engine.waypoints.count) stops").font(.caption).foregroundStyle(.secondary)
-            }
-            if engine.waypoints.isEmpty {
-                Text("Add two or more stops on the map to start moving.").font(.callout).foregroundStyle(.secondary)
-            }
-            HStack {
                 Text("Speed").font(.callout)
                 Spacer()
                 Text("\(Int(engine.speedKmh)) km/h").font(.callout.monospacedDigit())
             }
-            Slider(value: $engine.speedKmh, in: 1...300)
             HStack {
                 preset("Walk", speed: 5)
                 preset("Cycle", speed: 18)
                 preset("Drive", speed: 50)
             }
-            Toggle("Repeat route", isOn: $engine.loop).font(.callout)
-            DisclosureGroup("More options", isExpanded: $advanced) {
-                VStack(alignment: .leading) {
+            DisclosureGroup("Route options", isExpanded: $advanced) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Custom speed").font(.caption)
+                    Slider(value: $engine.speedKmh, in: 1...300)
+                    Toggle("Repeat route", isOn: $engine.loop).font(.callout)
                     Text("GPS variation · \(Int(engine.jitterMetres)) m").font(.caption)
                     Slider(value: $engine.jitterMetres, in: 0...20)
                 }.padding(.top, 10)
@@ -601,32 +661,35 @@ struct ContentView: View {
                     if engine.playback == .playing { engine.pause() } else { engine.play() }
                 } label: {
                     Label(engine.playback == .playing ? "Pause" : (engine.playback == .paused ? "Resume" : "Start route"), systemImage: engine.playback == .playing ? "pause.fill" : "play.fill")
-                }.buttonStyle(.borderedProminent).disabled(!canSimulate || engine.waypoints.count < 2)
+                }.buttonStyle(.borderedProminent).disabled(!canSimulate || engine.waypoints.count != 2 || engine.totalDistance < 1)
                 Button { engine.stop() } label: { Image(systemName: "stop.fill") }.disabled(engine.playback == .idle).help("Stop route")
             }
             if engine.playback != .idle { ProgressView(value: engine.progress) }
-            if !engine.waypoints.isEmpty {
+            if engine.waypoints.count == 2 {
+                Text("Direct route").font(.caption).foregroundStyle(.secondary)
                 Text(String(format: "%.2f km · about %.0f min", engine.totalDistance / 1000, engine.estimatedDurationSeconds / 60))
                     .font(.caption).foregroundStyle(.secondary)
-                Button("Clear route") { engine.clearRoute() }.font(.caption)
+                Button("Clear route") { clearRouteDraft() }.font(.caption)
             }
         }
     }
 
     private func preset(_ title: String, speed: Double) -> some View {
-        Button(title) { engine.speedKmh = speed }.controlSize(.small)
+        Button { engine.speedKmh = speed } label: {
+            Text(title).frame(maxWidth: .infinity)
+                .padding(.vertical, 7)
+                .background(engine.speedKmh == speed ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.045),
+                            in: RoundedRectangle(cornerRadius: 8))
+                .foregroundStyle(engine.speedKmh == speed ? Color.accentColor : Color.primary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(engine.speedKmh == speed ? .isSelected : [])
     }
     private func handleTap(_ coordinate: CLLocationCoordinate2D) {
-        guard canSimulate, mode != .explore else { return }
+        guard canSimulate, mode == .teleport else { return }
         following = false
-        if mode == .route {
-            engine.addWaypoint(coordinate)
-        } else {
-            selection = coordinate
-            // One click is the whole selection gesture here, so bring the pin to
-            // the middle of the map; that also gives its card room to open.
-            mapController.focus(on: coordinate)
-        }
+        selection = coordinate
+        mapController.focus(on: coordinate)
     }
     private func icon(_ mode: EditMode) -> String {
         switch mode { case .explore: return "iphone"; case .teleport: return "mappin.and.ellipse"; case .route: return "point.topleft.down.to.point.bottomright.curvepath" }
