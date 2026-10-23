@@ -27,15 +27,16 @@ struct ContentView: View {
     @State private var advanced = false
 
     var body: some View {
-        HStack(spacing: 0) {
-            sidebar.frame(width: 300)
-            Divider()
+        ZStack(alignment: .leading) {
             ZStack(alignment: .top) {
                 MapView(waypoints: engine.waypoints,
                         currentCoordinate: displayedCoordinate,
                         locationTitle: "\(deviceFamily) location",
                         locationAccessReady: macLocation.location != nil,
-                        selectedCoordinate: selection,
+                        selectedCoordinate: mode == .teleport ? selection : nil,
+                        canMoveToSelection: canSimulate,
+                        onMoveToSelection: moveToSelection,
+                        onDismissSelection: { selection = nil },
                         controller: mapController, onTap: handleTap,
                         onPan: { following = false })
                 VStack(spacing: 12) {
@@ -45,26 +46,9 @@ struct ContentView: View {
                             .font(.callout).padding(.horizontal, 16).padding(.vertical, 9)
                             .background(.regularMaterial, in: Capsule())
                     }
-                    Spacer()
-                    HStack(alignment: .bottom) {
-                        if devices.hasDevice, mode == .teleport, let selection {
-                            VStack(alignment: .leading, spacing: 10) {
-                                Text("Selected destination").font(.headline)
-                                Text(coordinateText(selection)).font(.caption.monospaced()).foregroundStyle(.secondary)
-                                Button("Move here") {
-                                    engine.stop()
-                                    engine.teleport(to: selection)
-                                    self.selection = nil
-                                    following = true
-                                    centerOnDisplayedLocation()
-                                }.buttonStyle(.borderedProminent).disabled(!canSimulate)
-                            }
-                            .padding(18).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
-                        }
-                        Spacer()
-                    }
-                }.padding(20)
+                }.padding(20).padding(.leading, 328)
             }
+            sidebar.frame(width: 300).padding(14)
         }
         .disabled(macLocation.isAwaitingAuthorization)
         .accessibilityHidden(macLocation.isAwaitingAuthorization)
@@ -136,12 +120,20 @@ struct ContentView: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Image(systemName: "location.circle.fill").font(.title).foregroundStyle(.blue)
-                Text("iOS Fake GPS").font(.title3.weight(.semibold))
-            }.padding(22)
+            HStack(spacing: 12) {
+                Image(systemName: "location.fill")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 40, height: 40)
+                    .background(.blue.gradient, in: RoundedRectangle(cornerRadius: 13))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("iOS Fake GPS").font(.headline)
+                    Text("Devices & locations").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }.padding(20)
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 20) {
                     if !devices.connectedDevices.isEmpty {
                         Picker("Device", selection: Binding(
                             get: { devices.connectedUDID ?? "" },
@@ -153,30 +145,38 @@ struct ContentView: View {
                             }
                         }
                         .pickerStyle(.menu)
+                        .padding(10)
+                        .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 14))
                         .disabled(sidecar.isRestoring)
                     }
-                    sidebarSearch.disabled(!canSimulate)
+                    sidebarSearch
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("EXPLORE").font(.caption2.weight(.semibold)).foregroundStyle(.secondary).padding(.bottom, 4)
+                        Text("Explore").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary).padding(.leading, 12).padding(.bottom, 4)
                         ForEach(EditMode.allCases) { item in
                             Button { withAnimation(.easeInOut(duration: 0.2)) { selection = nil; mode = item } } label: {
                                 HStack(spacing: 12) {
-                                    Image(systemName: icon(item)).frame(width: 20)
+                                    Image(systemName: item == .explore && deviceFamily == "iPad" ? "ipad" : icon(item))
+                                        .font(.system(size: 18, weight: .medium))
+                                        .frame(width: 30, height: 30)
                                     Text(item == .explore ? "My \(deviceFamily)" : item.rawValue)
                                     Spacer()
-                                    if mode == item { Image(systemName: "chevron.right").font(.caption.weight(.bold)) }
+                                    if mode == item { Image(systemName: "chevron.right").font(.caption2.weight(.bold)) }
                                 }
                                 .font(.system(size: 14, weight: mode == item ? .semibold : .regular))
-                                .padding(12)
-                                .background(mode == item ? Color.accentColor.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 10))
+                                .padding(.horizontal, 12).padding(.vertical, 10)
+                                .background(mode == item ? Color.accentColor.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 16))
                                 .foregroundStyle(mode == item ? Color.accentColor : .primary)
                                 .contentShape(Rectangle())
                             }.buttonStyle(.plain)
+                                .accessibilityAddTraits(mode == item ? .isSelected : [])
                                 .disabled(item != .explore && !canSimulate)
                                 .opacity(item != .explore && !canSimulate ? 0.4 : 1)
                         }
                     }
-                    if mode == .route { routeControls }
+                    if mode == .route {
+                        routeControls.padding(14)
+                            .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 18))
+                    }
                     if let restoreError { Text(restoreError).font(.caption).foregroundStyle(.orange) }
                     if let error = connectionError, devices.hasDevice {
                         VStack(alignment: .leading, spacing: 8) {
@@ -186,9 +186,10 @@ struct ContentView: View {
                     } else if let error = sidecar.lastError, canSimulate {
                         Text(error).font(.caption).foregroundStyle(.orange)
                     }
-                }.padding(.horizontal, 20).padding(.bottom, 20)
+                }.padding(.horizontal, 16).padding(.bottom, 20)
             }
-            Divider()
+            .scrollIndicators(.hidden)
+            Divider().padding(.horizontal, 20)
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Circle().fill(sidecar.state.isReady ? .green : .secondary).frame(width: 7, height: 7)
@@ -198,11 +199,12 @@ struct ContentView: View {
                 if sidecar.state.isReady {
                     Button(sidecar.isRestoring ? "Restoring location…" : "Restore real location") {
                         Task { await restoreLocation() }
-                    }.disabled(sidecar.isRestoring)
+                    }.buttonStyle(.bordered).controlSize(.large)
+                        .disabled(sidecar.isRestoring)
                 }
             }.padding(20)
         }
-        .background(.regularMaterial)
+        .modifier(SidebarGlass())
     }
 
     private var deviceCard: some View {
@@ -356,22 +358,29 @@ struct ContentView: View {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField("Search a place or address", text: $search.query)
                     .textFieldStyle(.plain)
-                    .onSubmit { search.run(near: mapController.currentCenter?()) }
-                    .onChange(of: search.query) { _, _ in search.run(near: mapController.currentCenter?()) }
+                    .onSubmit {
+                        Task {
+                            guard let item = await search.submit(near: mapController.currentCenter?())
+                            else { return }
+                            go(to: item)
+                        }
+                    }
+                    .onChange(of: search.query) { _, _ in
+                        search.update(near: mapController.currentCenter?())
+                    }
                 if search.isSearching { ProgressView().controlSize(.small) }
                 if !search.query.isEmpty {
                     Button { search.clear() } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain)
                 }
-            }.padding(14).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-            if !search.results.isEmpty {
+            }.padding(14).background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
+            if !search.suggestions.isEmpty {
                 VStack(spacing: 0) {
-                    ForEach(Array(search.results.prefix(6).enumerated()), id: \.offset) { _, item in
+                    ForEach(Array(search.suggestions.prefix(6).enumerated()), id: \.offset) { _, item in
                         Button {
-                            following = false
-                            mapController.center(on: item.coordinate, meters: 1500)
-                            if mode == .route { engine.addWaypoint(item.coordinate) }
-                            else { mode = .teleport; selection = item.coordinate }
-                            search.clear()
+                            Task {
+                                guard let resolved = await search.resolve(item) else { return }
+                                go(to: resolved)
+                            }
                         } label: {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(item.displayTitle).font(.callout.weight(.medium)).lineLimit(2)
@@ -382,6 +391,20 @@ struct ContentView: View {
                 }.background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
             }
         }.frame(maxWidth: .infinity)
+    }
+
+    /// Moves the map (and the current mode) to a search result, then clears the
+    /// suggestion list.
+    private func go(to item: MKMapItem) {
+        following = false
+        mapController.center(on: item.coordinate, meters: 1500)
+        // Browsing the map is always allowed; picking a destination to push is
+        // not, so leave the mode alone until a device is actually connected.
+        if canSimulate {
+            if mode == .route { engine.addWaypoint(item.coordinate) }
+            else { mode = .teleport; selection = item.coordinate }
+        }
+        search.clear()
     }
 
     private var routeControls: some View {
@@ -440,5 +463,12 @@ struct ContentView: View {
     private func icon(_ mode: EditMode) -> String {
         switch mode { case .explore: return "iphone"; case .teleport: return "mappin.and.ellipse"; case .route: return "point.topleft.down.to.point.bottomright.curvepath" }
     }
-    private func coordinateText(_ c: CLLocationCoordinate2D) -> String { String(format: "%.5f, %.5f", c.latitude, c.longitude) }
+    private func moveToSelection() {
+        guard canSimulate, let selection else { return }
+        engine.stop()
+        engine.teleport(to: selection)
+        self.selection = nil
+        following = true
+        centerOnDisplayedLocation()
+    }
 }

@@ -6,6 +6,17 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var onTerminate: (() -> Void)?
 
+    /// `swift run` starts us as a bare executable with no `.app` bundle, which
+    /// AppKit treats as a background process: the window draws, but the app
+    /// never becomes frontmost and keystrokes stay with the terminal. Claiming
+    /// the regular activation policy makes the development build behave like
+    /// the shipped bundle. Harmless when we *are* launched from a bundle.
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate()
+        DispatchQueue.main.async { NSApp.windows.first?.makeKeyAndOrderFront(nil) }
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
     }

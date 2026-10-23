@@ -11,6 +11,9 @@ struct MapView: NSViewRepresentable {
     var locationTitle: String
     var locationAccessReady: Bool
     var selectedCoordinate: CLLocationCoordinate2D?
+    var canMoveToSelection: Bool
+    var onMoveToSelection: () -> Void
+    var onDismissSelection: () -> Void
     var controller: MapController
     /// Called with the map coordinate the user clicked.
     var onTap: (CLLocationCoordinate2D) -> Void
@@ -19,7 +22,9 @@ struct MapView: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeNSView(context: Context) -> MKMapView {
-        let map = MKMapView()
+        let map = DestinationMapView()
+        map.onLayout = { [weak coordinator = context.coordinator] in coordinator?.positionDestinationCard() }
+        map.onManualZoom = { [weak coordinator = context.coordinator] in coordinator?.parent.onPan() }
         map.delegate = context.coordinator
         map.showsZoomControls = true
         map.showsCompass = true
@@ -33,7 +38,7 @@ struct MapView: NSViewRepresentable {
         map.isPitchEnabled = true
         // Single-click drops a waypoint; require exactly one click so it doesn't
         // swallow the map's own double-click-to-zoom or drag-to-pan.
-        let click = NSClickGestureRecognizer(
+        let click = MapSelectionClickRecognizer(
             target: context.coordinator,
             action: #selector(Coordinator.handleClick(_:))
         )
@@ -72,8 +77,8 @@ struct MapView: NSViewRepresentable {
         private let currentAnnotation = MKPointAnnotation()
         private var hasCurrent = false
         private let selectionAnnotation = MKPointAnnotation()
+        private var destinationCard: NSHostingView<DestinationCard>?
         private var previousWaypoints: [UUID] = []
-        private var programmaticMove = false
 
         init(_ parent: MapView) {
             self.parent = parent
@@ -87,7 +92,6 @@ struct MapView: NSViewRepresentable {
                 guard let map = self?.mapView else { return }
                 // Explicit destinations leave native location tracking.
                 map.setUserTrackingMode(.none, animated: false)
-                self?.programmaticMove = true
                 map.setRegion(
                     MKCoordinateRegion(center: coord, latitudinalMeters: meters, longitudinalMeters: meters),
                     animated: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -113,11 +117,17 @@ struct MapView: NSViewRepresentable {
         }
 
         func gestureRecognizer(_ gestureRecognizer: NSGestureRecognizer, shouldAttemptToRecognizeWith event: NSEvent) -> Bool {
-            guard let map = mapView else { return false }
+            // Pin placement only owns primary-button clicks. Trackpad gesture
+            // streams must go straight to MapKit, even during a camera animation.
+            if [.beginGesture, .magnify, .rotate, .scrollWheel].contains(event.type) {
+                parent.onPan()
+                return false
+            }
+            guard event.type == .leftMouseDown, let map = mapView else { return false }
             let point = map.convert(event.locationInWindow, from: nil)
             var hit = map.hitTest(map.convert(point, to: map.superview))
             while let view = hit, view !== map {
-                if view is NSControl { return false }
+                if view is NSControl || view === destinationCard { return false }
                 hit = view.superview
             }
             return true
@@ -178,14 +188,48 @@ struct MapView: NSViewRepresentable {
                 selectionAnnotation.title = "Selected destination"
                 selectionAnnotation.coordinate = selected
                 if !map.annotations.contains(where: { $0 === selectionAnnotation }) { map.addAnnotation(selectionAnnotation) }
-            } else { map.removeAnnotation(selectionAnnotation) }
+                let content = DestinationCard(coordinate: selected, canMove: parent.canMoveToSelection,
+                                              onMove: parent.onMoveToSelection, onDismiss: parent.onDismissSelection)
+                if let destinationCard {
+                    destinationCard.rootView = content
+                } else {
+                    let card = NSHostingView(rootView: content)
+                    map.addSubview(card)
+                    destinationCard = card
+                }
+                positionDestinationCard()
+            } else {
+                map.removeAnnotation(selectionAnnotation)
+                destinationCard?.removeFromSuperview()
+                destinationCard = nil
+            }
+        }
+
+        // Keep the card attached while panning, zooming, or resizing the window.
+        func positionDestinationCard() {
+            guard let map = mapView, let card = destinationCard else { return }
+            let point = map.convert(selectionAnnotation.coordinate, toPointTo: map)
+            let visible = map.bounds.insetBy(dx: 16, dy: 16)
+            card.isHidden = !visible.contains(point) || point.x < 328
+            let size = NSSize(width: 292, height: 252)
+            let right = point.x + 28
+            let x = right + size.width <= visible.maxX ? right : point.x - size.width - 28
+            card.frame = NSRect(x: max(328, min(x, visible.maxX - size.width)),
+                                y: max(visible.minY, min(point.y - size.height / 2, visible.maxY - size.height)),
+                                width: size.width, height: size.height)
+        }
+
+        func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            positionDestinationCard()
         }
 
         func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
-            if !programmaticMove, let event = NSApp.currentEvent,
-               [.leftMouseDragged, .rightMouseDragged, .scrollWheel, .magnify, .rotate].contains(event.type) { parent.onPan() }
+            // User input takes precedence even if it interrupts a recenter animation.
+            if let event = NSApp.currentEvent,
+               [.leftMouseDragged, .rightMouseDragged, .scrollWheel, .magnify, .rotate].contains(event.type) {
+                parent.onPan()
+            }
         }
-        func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) { programmaticMove = false }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let line = overlay as? MKPolyline {
@@ -225,7 +269,8 @@ struct MapView: NSViewRepresentable {
                 view.markerTintColor = .systemOrange
                 view.glyphImage = NSImage(systemSymbolName: "mappin", accessibilityDescription: nil)
                 view.displayPriority = .required
-                view.canShowCallout = true
+                view.canShowCallout = false
+                view.titleVisibility = .hidden
                 return view
             }
             if annotation === currentAnnotation {
@@ -258,3 +303,92 @@ struct MapView: NSViewRepresentable {
 
 /// Distinguishes user-placed waypoints from the live position marker.
 final class WaypointAnnotation: MKPointAnnotation {}
+
+final class DestinationMapView: MKMapView {
+    var onLayout: (() -> Void)?
+    var onManualZoom: (() -> Void)?
+    private var zoomMonitor: Any?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        Self.trace("attached window=\(String(describing: window?.windowNumber))")
+        if let zoomMonitor {
+            NSEvent.removeMonitor(zoomMonitor)
+            self.zoomMonitor = nil
+        }
+        guard window != nil else { return }
+        // MapKit's internal subviews can consume scroll events before responder
+        // overrides run. Scope this monitor to events hit-tested to this map.
+        zoomMonitor = NSEvent.addLocalMonitorForEvents(matching: [.magnify, .scrollWheel]) { [weak self] event in
+            Self.trace("event=\(event.type.rawValue) eventWindow=\(String(describing: event.window?.windowNumber)) keyWindow=\(String(describing: NSApp.keyWindow?.windowNumber)) mapWindow=\(String(describing: self?.window?.windowNumber))")
+            Self.trace("zoomEnabled=\(String(describing: self?.isZoomEnabled)) dx=\(event.deltaX) dy=\(event.deltaY) scrollingX=\(event.scrollingDeltaX) scrollingY=\(event.scrollingDeltaY)")
+            guard let self, self.isZoomEnabled, let window = self.window,
+                  Self.isZoomEventWindow(event.window, mapWindow: window, keyWindow: NSApp.keyWindow) else { return event }
+            // Gesture events may have no associated window yet. In that case,
+            // their locationInWindow is not a coordinate in this map's window.
+            let point = event.window == nil ? window.mouseLocationOutsideOfEventStream : event.locationInWindow
+            guard self.acceptsZoom(atWindowPoint: point) else { Self.trace("hit rejected"); return event }
+
+            let factor: Double
+            if event.type == .magnify {
+                factor = max(0.01, 1 + Double(event.magnification))
+            } else {
+                guard abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX) else { return event }
+                let sensitivity = event.hasPreciseScrollingDeltas ? 0.008 : 0.12
+                factor = exp(max(-1, min(1, Double(event.scrollingDeltaY) * sensitivity)))
+            }
+            guard factor != 1 else { return nil }
+            self.onManualZoom?()
+            self.setUserTrackingMode(.none, animated: false)
+            let camera = self.camera.copy() as! MKMapCamera
+            camera.centerCoordinateDistance = min(40_000_000, max(20, camera.centerCoordinateDistance / factor))
+            Self.trace("factor=\(factor) before=\(self.camera.centerCoordinateDistance) target=\(camera.centerCoordinateDistance)")
+            self.setCamera(camera, animated: false)
+            Self.trace("after=\(self.camera.centerCoordinateDistance)")
+            // Consume once so MapKit cannot apply a second zoom or scroll-pan.
+            return nil
+        }
+    }
+
+    private static func trace(_ message: String) {
+        let url = URL(fileURLWithPath: "/tmp/fakegps-trackpad.log")
+        let data = Data((message + "\n").utf8)
+        if let file = try? FileHandle(forWritingTo: url) {
+            defer { try? file.close() }
+            _ = try? file.seekToEnd()
+            try? file.write(contentsOf: data)
+        } else { try? data.write(to: url) }
+    }
+
+    static func isZoomEventWindow(_ eventWindow: NSWindow?, mapWindow: NSWindow, keyWindow: NSWindow?) -> Bool {
+        (eventWindow ?? keyWindow) === mapWindow
+    }
+
+    func acceptsZoom(atWindowPoint point: NSPoint) -> Bool {
+        guard let content = window?.contentView else { return false }
+        // NSView.hitTest takes a point in its SUPERview, not its own bounds.
+        // SwiftUI's content view is flipped, so converting to it mirrors Y.
+        let hitPoint = content.superview?.convert(point, from: nil) ?? point
+        var hit = content.hitTest(hitPoint)
+        while let view = hit, view !== self {
+            Self.trace("hit=\(type(of: view))")
+            if view is NSControl || view is NSHostingView<DestinationCard> { return false }
+            hit = view.superview
+        }
+        return hit === self
+    }
+
+    deinit {
+        if let zoomMonitor { NSEvent.removeMonitor(zoomMonitor) }
+    }
+
+    override func layout() {
+        super.layout()
+        onLayout?()
+    }
+}
+
+/// Dropping a pin must never prevent MapKit's native zoom, pan, or rotation.
+private final class MapSelectionClickRecognizer: NSClickGestureRecognizer {
+    override func canPrevent(_ preventedGestureRecognizer: NSGestureRecognizer) -> Bool { false }
+}
