@@ -15,6 +15,19 @@ struct DeviceInfo: Identifiable, Hashable, Codable {
         return "\(name ?? model)\(os)"
     }
 
+    var usbConnectionDescription: String {
+        // Hardware identifier reported by the connected iPhone 16 Pro.
+        // Preserve the reported identity for models we have not mapped.
+        let model = productType == "iPhone17,1"
+            ? "iPhone 16 Pro" : (name ?? productType ?? "iPhone")
+        var parts = [model]
+        if let version = productVersion, !version.isEmpty {
+            parts.append("iOS \(version)")
+        }
+        parts.append("USB connected")
+        return parts.joined(separator: " · ")
+    }
+
     enum CodingKeys: String, CodingKey {
         case udid, name
         case productType = "product_type"

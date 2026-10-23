@@ -203,7 +203,9 @@ struct ContentView: View {
     private var connectionStatus: String {
         if !devices.hasDevice { return "Connect your iPhone to get started" }
         if sidecar.isRestoring { return "Restoring location…" }
-        if canSimulate { return "Ready to simulate" }
+        if canSimulate, case let .ready(device) = sidecar.state {
+            return device.usbConnectionDescription
+        }
         if connectionError != nil { return "Connection needs attention" }
         return tunnel.isStarting ? "Starting device connection…" : "Connecting to iPhone…"
     }
