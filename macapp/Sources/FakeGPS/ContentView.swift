@@ -648,30 +648,18 @@ struct ContentView: View {
             HStack {
                 Text("Playback speed").font(.callout)
                 Spacer()
-                Text("\(Int(engine.speedKmh)) km/h").font(.callout.monospacedDigit())
+                Text(String(format: "%.1f mph", engine.speedMph)).font(.callout.monospacedDigit())
             }
             HStack {
                 preset("Walk", speed: 5)
                 preset("Cycle", speed: 18)
                 preset("Drive", speed: 50)
             }
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Device updates").font(.callout)
-                Picker("Device update frequency", selection: $engine.updateRate) {
-                    ForEach(DeviceUpdateRate.allCases) { rate in
-                        Text(rate.label).tag(rate)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-            }
             DisclosureGroup("Route options", isExpanded: $advanced) {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Custom speed").font(.caption)
-                    Slider(value: $engine.speedKmh, in: 1...300)
+                    Text("Custom speed (mph)").font(.caption)
+                    Slider(value: $engine.speedMph, in: (1 / 1.609344)...(300 / 1.609344))
                     Toggle("Repeat route", isOn: $engine.loop).font(.callout)
-                    Text("GPS variation · \(Int(engine.jitterMetres)) m").font(.caption)
-                    Slider(value: $engine.jitterMetres, in: 0...20)
                 }.padding(.top, 10)
             }.font(.caption)
             HStack {
@@ -679,7 +667,9 @@ struct ContentView: View {
                     if engine.playback == .playing { engine.pause() } else { engine.play() }
                 } label: {
                     Label(engine.playback == .playing ? "Pause" : (engine.playback == .paused ? "Resume" : "Start route"), systemImage: engine.playback == .playing ? "pause.fill" : "play.fill")
-                }.buttonStyle(.borderedProminent).disabled(!canSimulate || routePlanner.isLoading || engine.waypoints.count < 2 || engine.totalDistance < 1)
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 36)
+                }.buttonStyle(.borderedProminent).controlSize(.large).disabled(!canSimulate || routePlanner.isLoading || engine.waypoints.count < 2 || engine.totalDistance < 1)
                 Button { engine.stop() } label: { Image(systemName: "stop.fill") }.disabled(engine.playback == .idle).help("Stop route")
             }
             if engine.playback != .idle { ProgressView(value: engine.progress) }
@@ -688,7 +678,7 @@ struct ContentView: View {
                 if !routePlanner.name.isEmpty {
                     Text(routePlanner.name).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 }
-                Text(String(format: "%.2f km · about %.0f min", engine.totalDistance / 1000, engine.estimatedDurationSeconds / 60))
+                Text("\(RouteDisplay.distance(metres: engine.totalDistance)) · about \(RouteDisplay.duration(seconds: engine.estimatedDurationSeconds))")
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Clear route") { clearRouteDraft() }.font(.caption)
             }

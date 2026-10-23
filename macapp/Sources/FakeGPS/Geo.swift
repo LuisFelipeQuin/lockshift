@@ -68,17 +68,4 @@ enum Geo {
         return points.last
     }
 
-    /// Apply a small random horizontal jitter (metres) to mimic real GPS noise.
-    static func jitter(_ c: CLLocationCoordinate2D, metres: Double, seed: Double) -> CLLocationCoordinate2D {
-        guard metres > 0 else { return c }
-        // Deterministic-ish offset derived from seed so we don't import RNG state.
-        let angle = (seed.truncatingRemainder(dividingBy: 1)) * 2 * .pi
-        let r = metres * (0.5 + 0.5 * abs(sin(seed * 12.9898)))
-        let dLat = (r * cos(angle)) / earthRadius
-        let dLon = (r * sin(angle)) / (earthRadius * cos(radians(c.latitude)))
-        return CLLocationCoordinate2D(
-            latitude: c.latitude + degrees(dLat),
-            longitude: c.longitude + degrees(dLon)
-        )
-    }
 }

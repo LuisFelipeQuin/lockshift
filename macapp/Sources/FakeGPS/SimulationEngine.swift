@@ -17,32 +17,17 @@ enum PlaybackState: Equatable {
     case paused
 }
 
-enum DeviceUpdateRate: Int, CaseIterable, Identifiable {
-    case one = 1, two = 2, five = 5, ten = 10
-    var id: Int { rawValue }
-    var interval: TimeInterval { 1.0 / Double(rawValue) }
-    var label: String { "\(rawValue) Hz" }
-}
-
 /// Drives simulated movement along the route at a chosen speed and pushes each
 /// interpolated coordinate to the device through the `Sidecar`.
 ///
 /// This is the part that makes us Lockito-equivalent: we own the interpolation,
-/// so speed, pause, loop and GPS jitter are all under our control rather than
+/// so speed, pause and loop are all under our control rather than
 /// relying on the device's own GPX timing.
 @MainActor
 final class SimulationEngine: ObservableObject {
     @Published var waypoints: [Waypoint] = []
     @Published var speedKmh: Double = 50      // target ground speed
     @Published var loop: Bool = false
-    @Published var jitterMetres: Double = 0   // 0 = perfectly smooth
-    @Published var updateRate: DeviceUpdateRate = .one {
-        didSet {
-            guard updateRate != oldValue, playback == .playing else { return }
-            step()
-            if playback == .playing { scheduleTimer() }
-        }
-    }
 
     @Published private(set) var playback: PlaybackState = .idle
     @Published private(set) var currentCoordinate: CLLocationCoordinate2D?
@@ -54,7 +39,7 @@ final class SimulationEngine: ObservableObject {
     private let now: () -> TimeInterval
     private var lastUpdate: TimeInterval = 0
     private var timerGeneration = UUID()
-    private var jitterSeed: Double = 0
+    private let updateInterval: TimeInterval = 0.1 // Fixed 10 Hz device updates.
 
     init(sidecar: Sidecar, now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
         self.sidecar = sidecar
@@ -125,7 +110,7 @@ final class SimulationEngine: ObservableObject {
         timer?.invalidate()
         timerGeneration = UUID()
         let generation = timerGeneration
-        let t = Timer(timeInterval: updateRate.interval, repeats: true) { [weak self] _ in
+        let t = Timer(timeInterval: updateInterval, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, self.timerGeneration == generation else { return }
                 self.step()
@@ -147,7 +132,6 @@ final class SimulationEngine: ObservableObject {
 
         let speedMps = speedKmh * 1000 / 3600
         travelled += speedMps * elapsed
-        jitterSeed += 0.37 * elapsed
 
         if travelled >= total {
             if loop {
@@ -163,16 +147,18 @@ final class SimulationEngine: ObservableObject {
     }
 
     private func emitCurrent(total: Double) {
-        guard var c = Geo.point(along: coordinates, at: travelled) else { return }
-        if jitterMetres > 0 {
-            c = Geo.jitter(c, metres: jitterMetres, seed: jitterSeed)
-        }
+        guard let c = Geo.point(along: coordinates, at: travelled) else { return }
         currentCoordinate = c
         progress = total == 0 ? 0 : min(1, travelled / total)
         sidecar.setLocation(c.latitude, c.longitude)
     }
 
     // MARK: - Readouts
+
+    var speedMph: Double {
+        get { speedKmh / 1.609344 }
+        set { speedKmh = newValue * 1.609344 }
+    }
 
     var estimatedDurationSeconds: Double {
         let speedMps = speedKmh * 1000 / 3600

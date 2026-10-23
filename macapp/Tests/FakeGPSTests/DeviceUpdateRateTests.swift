@@ -31,31 +31,25 @@ for line in sys.stdin:
         throw NSError(domain: "Helper failed to start", code: 1)
     }
 
-    func testAllRatesTravelSameDistanceInSameElapsedTime() async throws {
+    func testTenHzPreservesTravelSpeedWithoutGPSVariation() async throws {
         let sidecar = try await helper()
         defer { sidecar.stop() }
         var clock: TimeInterval = 0
         let engine = SimulationEngine(sidecar: sidecar, now: { clock })
         defer { engine.stop() }
-        XCTAssertEqual(engine.updateRate, .one)
-        for rate in DeviceUpdateRate.allCases {
-            engine.stop()
-            engine.waypoints = road
-            engine.updateRate = rate
-            engine.speedKmh = 36
-            engine.play()
-            XCTAssertEqual(engine.currentCoordinate?.longitude, 0)
-            for _ in 0..<(rate.rawValue * 2) {
-                clock += rate.interval
-                engine.step()
-            }
-            let coordinate = try XCTUnwrap(engine.currentCoordinate)
-            XCTAssertEqual(Geo.distance(road[0].coordinate, coordinate), 20, accuracy: 0.001,
-                           "Speed must be independent of \(rate.label)")
+        engine.waypoints = road
+        engine.speedKmh = 36
+        engine.play()
+        XCTAssertEqual(engine.currentCoordinate?.longitude, 0)
+        for _ in 0..<20 {
+            clock += 0.1
+            engine.step()
+            XCTAssertEqual(engine.currentCoordinate?.latitude, 0)
         }
+        XCTAssertEqual(Geo.distance(road[0].coordinate, try XCTUnwrap(engine.currentCoordinate)), 20, accuracy: 0.001)
     }
 
-    func testChangingRateAndPausingDoNotResetOrSkipDistance() async throws {
+    func testPausingDoesNotResetOrSkipDistance() async throws {
         let sidecar = try await helper()
         defer { sidecar.stop() }
         var clock: TimeInterval = 0
@@ -65,13 +59,12 @@ for line in sys.stdin:
         engine.speedKmh = 36
         engine.play()
         clock = 0.5
-        engine.updateRate = .ten
+        engine.step()
         XCTAssertEqual(Geo.distance(road[0].coordinate, try XCTUnwrap(engine.currentCoordinate)), 5, accuracy: 0.001)
         clock = 0.6
         engine.step()
         engine.pause()
         clock = 100
-        engine.updateRate = .five
         engine.play()
         clock = 100.2
         engine.step()
@@ -81,7 +74,7 @@ for line in sys.stdin:
         XCTAssertEqual(Geo.distance(road[0].coordinate, try XCTUnwrap(engine.currentCoordinate)), 28, accuracy: 0.001)
     }
 
-    func testRateChangeReschedulesActualDeviceWritesAndStopCancelsThem() async throws {
+    func testFixedTenHzWritesAndStopCancelsThem() async throws {
         let log = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: log) }
         let sidecar = try await helper(log: log)
@@ -90,7 +83,6 @@ for line in sys.stdin:
         defer { engine.stop() }
         engine.waypoints = road
         engine.play()
-        engine.updateRate = .ten
         try await Task.sleep(for: .milliseconds(750))
         engine.stop()
         try await Task.sleep(for: .milliseconds(150)) // Let the helper drain its pipe.
