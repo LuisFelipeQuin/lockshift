@@ -149,7 +149,6 @@ struct ContentView: View {
                         .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 14))
                         .disabled(sidecar.isRestoring)
                     }
-                    sidebarSearch
                     modeSection("Your device", [.explore])
                     modeSection("Edit location", [.teleport, .route])
                     if mode == .route {
@@ -193,7 +192,12 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
                 .padding(.leading, 12).padding(.bottom, 4)
-            ForEach(items) { item in modeRow(item) }
+            ForEach(items) { item in
+                modeRow(item)
+                // The address field hangs off the row it acts on, so the place
+                // to type an address is wherever the user just clicked.
+                if item == .teleport, mode == .teleport { sidebarSearch }
+            }
         }
     }
 
