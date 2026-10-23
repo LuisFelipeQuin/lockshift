@@ -4,7 +4,7 @@ import SwiftUI
 
 enum EditMode: String, CaseIterable, Identifiable {
     case explore = "My iPhone"
-    case teleport = "Move location"
+    case teleport = "Move to a place"
     case route = "Build a route"
     var id: String { rawValue }
 }
@@ -150,29 +150,8 @@ struct ContentView: View {
                         .disabled(sidecar.isRestoring)
                     }
                     sidebarSearch
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Explore").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary).padding(.leading, 12).padding(.bottom, 4)
-                        ForEach(EditMode.allCases) { item in
-                            Button { withAnimation(.easeInOut(duration: 0.2)) { selection = nil; mode = item } } label: {
-                                HStack(spacing: 12) {
-                                    Image(systemName: item == .explore && deviceFamily == "iPad" ? "ipad" : icon(item))
-                                        .font(.system(size: 18, weight: .medium))
-                                        .frame(width: 30, height: 30)
-                                    Text(item == .explore ? "My \(deviceFamily)" : item.rawValue)
-                                    Spacer()
-                                    if mode == item { Image(systemName: "chevron.right").font(.caption2.weight(.bold)) }
-                                }
-                                .font(.system(size: 14, weight: mode == item ? .semibold : .regular))
-                                .padding(.horizontal, 12).padding(.vertical, 10)
-                                .background(mode == item ? Color.accentColor.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 16))
-                                .foregroundStyle(mode == item ? Color.accentColor : .primary)
-                                .contentShape(Rectangle())
-                            }.buttonStyle(.plain)
-                                .accessibilityAddTraits(mode == item ? .isSelected : [])
-                                .disabled(item != .explore && !canSimulate)
-                                .opacity(item != .explore && !canSimulate ? 0.4 : 1)
-                        }
-                    }
+                    modeSection("Your device", [.explore])
+                    modeSection("Edit location", [.teleport, .route])
                     if mode == .route {
                         routeControls.padding(14)
                             .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 18))
@@ -205,6 +184,38 @@ struct ContentView: View {
             }.padding(20)
         }
         .modifier(SidebarGlass())
+    }
+
+    /// One titled group of sidebar modes. Splitting "Your device" from
+    /// "Edit location" keeps browsing the phone's real position visually
+    /// separate from the two modes that change it.
+    private func modeSection(_ title: String, _ items: [EditMode]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                .padding(.leading, 12).padding(.bottom, 4)
+            ForEach(items) { item in modeRow(item) }
+        }
+    }
+
+    private func modeRow(_ item: EditMode) -> some View {
+        Button { withAnimation(.easeInOut(duration: 0.2)) { selection = nil; mode = item } } label: {
+            HStack(spacing: 12) {
+                Image(systemName: item == .explore && deviceFamily == "iPad" ? "ipad" : icon(item))
+                    .font(.system(size: 18, weight: .medium))
+                    .frame(width: 30, height: 30)
+                Text(item == .explore ? "My \(deviceFamily)" : item.rawValue)
+                Spacer()
+                if mode == item { Image(systemName: "chevron.right").font(.caption2.weight(.bold)) }
+            }
+            .font(.system(size: 14, weight: mode == item ? .semibold : .regular))
+            .padding(.horizontal, 12).padding(.vertical, 10)
+            .background(mode == item ? Color.accentColor.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 16))
+            .foregroundStyle(mode == item ? Color.accentColor : .primary)
+            .contentShape(Rectangle())
+        }.buttonStyle(.plain)
+            .accessibilityAddTraits(mode == item ? .isSelected : [])
+            .disabled(item != .explore && !canSimulate)
+            .opacity(item != .explore && !canSimulate ? 0.4 : 1)
     }
 
     private var deviceCard: some View {
