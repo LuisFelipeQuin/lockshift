@@ -22,6 +22,7 @@ struct ContentView: View {
     @State private var selection: CLLocationCoordinate2D?
     @State private var connectionError: String?
     @State private var restoreError: String?
+    @State private var showsRestoreGuidance = false
     @State private var connectionAttempt = 0
     @State private var following = true
     @State private var advanced = false
@@ -60,6 +61,11 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 940, idealWidth: 1180, minHeight: 650, idealHeight: 760)
+        .alert("Restore requested", isPresented: $showsRestoreGuidance) {
+            Button("Got it", role: .cancel) { }
+        } message: {
+            Text("Allow up to 10 minutes, then check your location on your iPhone. If it still shows the simulated position, restart your iPhone. Recovery time can vary; the app cannot verify your iPhone’s GPS reading.")
+        }
         .task(id: "\(devices.connectedUDID ?? "none")-\(connectionAttempt)") {
             await connectAutomatically()
         }
@@ -367,6 +373,7 @@ struct ContentView: View {
             mode = .explore
             following = true
             if devices.hasDevice { macLocation.request() }
+            showsRestoreGuidance = true
         } else {
             restoreError = sidecar.lastError ?? "Couldn’t restore location. Try again."
         }
