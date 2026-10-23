@@ -17,6 +17,7 @@ struct ContentView: View {
     @EnvironmentObject var devices: DeviceWatcher
     @StateObject private var mapController = MapController()
     @StateObject private var search = PlaceSearch()
+    @StateObject private var routePlanner = RoutePlanner()
     @StateObject private var macLocation = MacLocation()
     @State private var mode: EditMode = .explore
     @State private var selection: CLLocationCoordinate2D?
@@ -91,6 +92,10 @@ struct ContentView: View {
                 selection = nil
                 mode = .explore
             }
+        }
+        .onChange(of: routePlanner.waypoints) { _, points in
+            engine.stop()
+            engine.waypoints = points
         }
         .onChange(of: routeStart) { _, _ in updateRouteEndpoints() }
         .onChange(of: routeEnd) { _, _ in updateRouteEndpoints() }
@@ -611,24 +616,27 @@ struct ContentView: View {
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 16))
-            if routeStart != nil && routeEnd != nil && engine.totalDistance < 1 {
-                Text("Choose a destination different from your starting point.")
-                    .font(.caption).foregroundStyle(.secondary)
+            if routePlanner.isLoading {
+                ProgressView("Finding a driving route…").controlSize(.small)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if let error = routePlanner.error {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(error).font(.caption).foregroundStyle(.orange)
+                    Button("Try again") { updateRouteEndpoints() }.font(.caption)
+                }
             }
         }
     }
 
     private func updateRouteEndpoints() {
         engine.stop()
+        engine.waypoints = []
         if routeStart != nil || routeEnd != nil { following = false }
-        guard let start = routeStart, let end = routeEnd else {
-            engine.waypoints = []
-            return
-        }
-        engine.waypoints = [Waypoint(coordinate: start.coordinate), Waypoint(coordinate: end.coordinate)]
+        routePlanner.plan(from: routeStart, to: routeEnd)
     }
 
     private func clearRouteDraft() {
+        routePlanner.clear()
         routeStart = nil
         routeEnd = nil
         useCurrentLocation = false
@@ -638,7 +646,7 @@ struct ContentView: View {
     private var routeControls: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("Speed").font(.callout)
+                Text("Playback speed").font(.callout)
                 Spacer()
                 Text("\(Int(engine.speedKmh)) km/h").font(.callout.monospacedDigit())
             }
@@ -661,12 +669,15 @@ struct ContentView: View {
                     if engine.playback == .playing { engine.pause() } else { engine.play() }
                 } label: {
                     Label(engine.playback == .playing ? "Pause" : (engine.playback == .paused ? "Resume" : "Start route"), systemImage: engine.playback == .playing ? "pause.fill" : "play.fill")
-                }.buttonStyle(.borderedProminent).disabled(!canSimulate || engine.waypoints.count != 2 || engine.totalDistance < 1)
+                }.buttonStyle(.borderedProminent).disabled(!canSimulate || routePlanner.isLoading || engine.waypoints.count < 2 || engine.totalDistance < 1)
                 Button { engine.stop() } label: { Image(systemName: "stop.fill") }.disabled(engine.playback == .idle).help("Stop route")
             }
             if engine.playback != .idle { ProgressView(value: engine.progress) }
-            if engine.waypoints.count == 2 {
-                Text("Direct route").font(.caption).foregroundStyle(.secondary)
+            if engine.waypoints.count >= 2 {
+                Label("Driving route", systemImage: "car.fill").font(.caption).foregroundStyle(.secondary)
+                if !routePlanner.name.isEmpty {
+                    Text(routePlanner.name).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                }
                 Text(String(format: "%.2f km · about %.0f min", engine.totalDistance / 1000, engine.estimatedDurationSeconds / 60))
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Clear route") { clearRouteDraft() }.font(.caption)

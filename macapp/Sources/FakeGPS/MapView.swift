@@ -179,6 +179,7 @@ struct MapView: NSViewRepresentable {
                     let line = MKPolyline(coordinates: waypoints.map(\.coordinate), count: waypoints.count)
                     map.addOverlay(line)
                     routeOverlay = line
+                    fitRoute(waypoints.map(\.coordinate) + [parent.routeStart, parent.routeEnd].compactMap { $0?.coordinate })
                 } else {
                     routeOverlay = nil
                 }
@@ -220,8 +221,11 @@ struct MapView: NSViewRepresentable {
             previousEndpoints = endpoints
             map.removeAnnotations(map.annotations.compactMap { $0 as? WaypointAnnotation })
             map.addAnnotations(Self.endpointAnnotations(endpoints))
-            let coordinates = endpoints.compactMap { $0?.coordinate }
-            guard let bounds = Self.routeBounds(coordinates) else { return }
+            fitRoute(endpoints.compactMap { $0?.coordinate } + parent.waypoints.map(\.coordinate))
+        }
+
+        private func fitRoute(_ coordinates: [CLLocationCoordinate2D]) {
+            guard let map = mapView, let bounds = Self.routeBounds(coordinates) else { return }
             map.setUserTrackingMode(.none, animated: false)
             // Reserve room for the sidebar, top status card, and marker heads.
             map.setVisibleMapRect(bounds,
