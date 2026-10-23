@@ -17,6 +17,13 @@ enum PlaybackState: Equatable {
     case paused
 }
 
+enum DeviceUpdateRate: Int, CaseIterable, Identifiable {
+    case one = 1, two = 2, five = 5, ten = 10
+    var id: Int { rawValue }
+    var interval: TimeInterval { 1.0 / Double(rawValue) }
+    var label: String { "\(rawValue) Hz" }
+}
+
 /// Drives simulated movement along the route at a chosen speed and pushes each
 /// interpolated coordinate to the device through the `Sidecar`.
 ///
@@ -29,6 +36,13 @@ final class SimulationEngine: ObservableObject {
     @Published var speedKmh: Double = 50      // target ground speed
     @Published var loop: Bool = false
     @Published var jitterMetres: Double = 0   // 0 = perfectly smooth
+    @Published var updateRate: DeviceUpdateRate = .one {
+        didSet {
+            guard updateRate != oldValue, playback == .playing else { return }
+            step()
+            if playback == .playing { scheduleTimer() }
+        }
+    }
 
     @Published private(set) var playback: PlaybackState = .idle
     @Published private(set) var currentCoordinate: CLLocationCoordinate2D?
@@ -37,11 +51,14 @@ final class SimulationEngine: ObservableObject {
     private let sidecar: Sidecar
     private var timer: Timer?
     private var travelled: Double = 0          // metres along the route
-    private let tick: TimeInterval = 1.0       // update cadence (s)
+    private let now: () -> TimeInterval
+    private var lastUpdate: TimeInterval = 0
+    private var timerGeneration = UUID()
     private var jitterSeed: Double = 0
 
-    init(sidecar: Sidecar) {
+    init(sidecar: Sidecar, now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
         self.sidecar = sidecar
+        self.now = now
     }
 
     var coordinates: [CLLocationCoordinate2D] { waypoints.map(\.coordinate) }
@@ -77,15 +94,20 @@ final class SimulationEngine: ObservableObject {
             if let only = coordinates.first { teleport(to: only) }
             return
         }
+        guard playback != .playing, totalDistance > 0 else { return }
         if playback == .idle { travelled = 0 }
+        lastUpdate = now()
         playback = .playing
+        emitCurrent(total: totalDistance)
         scheduleTimer()
-        step() // fire immediately so motion starts without a 1s delay
     }
 
     func pause() {
         guard playback == .playing else { return }
+        step()
+        guard playback == .playing else { return }
         playback = .paused
+        timerGeneration = UUID()
         timer?.invalidate()
         timer = nil
     }
@@ -94,27 +116,38 @@ final class SimulationEngine: ObservableObject {
         playback = .idle
         travelled = 0
         progress = 0
+        timerGeneration = UUID()
         timer?.invalidate()
         timer = nil
     }
 
     private func scheduleTimer() {
         timer?.invalidate()
-        let t = Timer(timeInterval: tick, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            Task { @MainActor in self.step() }
+        timerGeneration = UUID()
+        let generation = timerGeneration
+        let t = Timer(timeInterval: updateRate.interval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.timerGeneration == generation else { return }
+                self.step()
+            }
         }
         RunLoop.main.add(t, forMode: .common)
         timer = t
     }
 
-    private func step() {
-        guard playback == .playing, !sidecar.isRestoring else { return }
+    func step() {
+        guard playback == .playing else { return }
+        guard sidecar.state.isReady, !sidecar.isRestoring else { stop(); return }
+        let timestamp = now()
+        let elapsed = max(0, timestamp - lastUpdate)
+        lastUpdate = timestamp
+        guard elapsed > 0 else { return }
         let total = totalDistance
         guard total > 0 else { stop(); return }
 
         let speedMps = speedKmh * 1000 / 3600
-        travelled += speedMps * tick
+        travelled += speedMps * elapsed
+        jitterSeed += 0.37 * elapsed
 
         if travelled >= total {
             if loop {
@@ -132,7 +165,6 @@ final class SimulationEngine: ObservableObject {
     private func emitCurrent(total: Double) {
         guard var c = Geo.point(along: coordinates, at: travelled) else { return }
         if jitterMetres > 0 {
-            jitterSeed += 0.37
             c = Geo.jitter(c, metres: jitterMetres, seed: jitterSeed)
         }
         currentCoordinate = c

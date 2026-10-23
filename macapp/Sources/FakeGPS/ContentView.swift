@@ -655,6 +655,16 @@ struct ContentView: View {
                 preset("Cycle", speed: 18)
                 preset("Drive", speed: 50)
             }
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Device updates").font(.callout)
+                Picker("Device update frequency", selection: $engine.updateRate) {
+                    ForEach(DeviceUpdateRate.allCases) { rate in
+                        Text(rate.label).tag(rate)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
             DisclosureGroup("Route options", isExpanded: $advanced) {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Custom speed").font(.caption)
