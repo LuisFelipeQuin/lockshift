@@ -651,9 +651,7 @@ struct ContentView: View {
                 Text(String(format: "%.1f mph", engine.speedMph)).font(.callout.monospacedDigit())
             }
             HStack {
-                preset("Walk", speed: 5)
-                preset("Cycle", speed: 18)
-                preset("Drive", speed: 50)
+                ForEach(SpeedPreset.allCases) { preset($0) }
             }
             DisclosureGroup("Route options", isExpanded: $advanced) {
                 VStack(alignment: .leading, spacing: 12) {
@@ -685,16 +683,17 @@ struct ContentView: View {
         }
     }
 
-    private func preset(_ title: String, speed: Double) -> some View {
-        Button { engine.speedKmh = speed } label: {
-            Text(title).frame(maxWidth: .infinity)
+    private func preset(_ preset: SpeedPreset) -> some View {
+        let isSelected = SpeedPreset.matching(speedKmh: engine.speedKmh) == preset
+        return Button { engine.speedKmh = preset.speedKmh } label: {
+            Text(preset.rawValue).frame(maxWidth: .infinity)
                 .padding(.vertical, 7)
-                .background(engine.speedKmh == speed ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.045),
+                .background(isSelected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.045),
                             in: RoundedRectangle(cornerRadius: 8))
-                .foregroundStyle(engine.speedKmh == speed ? Color.accentColor : Color.primary)
+                .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
         }
         .buttonStyle(.plain)
-        .accessibilityAddTraits(engine.speedKmh == speed ? .isSelected : [])
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
     private func handleTap(_ coordinate: CLLocationCoordinate2D) {
         guard canSimulate, mode == .teleport else { return }

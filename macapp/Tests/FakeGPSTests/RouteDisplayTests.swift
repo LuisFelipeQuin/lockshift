@@ -19,3 +19,19 @@ final class RouteDisplayTests: XCTestCase {
         XCTAssertEqual(engine.speedMph, 60, accuracy: 0.00001)
     }
 }
+
+final class SpeedPresetTests: XCTestCase {
+    func testPresetsMatchTheirOwnSpeed() {
+        for preset in SpeedPreset.allCases {
+            XCTAssertEqual(SpeedPreset.matching(speedKmh: preset.speedKmh), preset)
+        }
+    }
+
+    func testCustomSpeedsStayInsideTheirBand() {
+        XCTAssertEqual(SpeedPreset.matching(speedKmh: 1), .walk)          // below walk
+        XCTAssertEqual(SpeedPreset.matching(speedKmh: 12), .walk)         // between walk and cycle
+        XCTAssertEqual(SpeedPreset.matching(speedKmh: 30), .cycle)        // between cycle and drive
+        XCTAssertEqual(SpeedPreset.matching(speedKmh: 100 * 1.609344), .drive) // 100 mph
+        XCTAssertEqual(SpeedPreset.matching(speedKmh: 300), .drive)       // slider maximum
+    }
+}
