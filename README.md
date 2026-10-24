@@ -4,6 +4,8 @@ Set a fixed location, or drive a route along real roads, on a **non-jailbroken**
 iPhone or iPad — all from a native macOS app. The phone just needs to be plugged
 in.
 
+![The macOS app with an iPhone connected, showing its real location](docs/app.png)
+
 iOS has no public "mock location" API, so an app installed *on the phone* can't
 fake GPS for other apps. Instead the location is driven from a tethered Mac over
 Apple's **developer tunnel** — the same mechanism Xcode uses to simulate location
@@ -17,20 +19,33 @@ device.
 
 ## What you can do
 
-- **Pick a device** — iPhone or iPad; the sidebar shows its name, iOS version
-  and UDID suffix, and lets you switch between attached devices.
-- **Move to a place** — search an address or click the map to jump the device
-  there instantly.
-- **Build a route** — choose a starting point (this Mac's current location, or
-  any address) and a destination; MapKit returns a **driving route that follows
-  actual roads**, with its name, total distance and estimated time.
-- **Play it back** — Walk / Cycle / Drive presets or a custom speed up to
-  ~186 mph (300 km/h), with repeat, pause and resume. Positions are pushed at
-  10 Hz, so movement is smooth rather than jumping between waypoints.
-- **See the real state** — the sidebar says *Real location* or *Location
-  edited*, so you always know whether the device is currently faked.
-- **Restore the real location** — one button, and an automatic restore when you
-  disconnect or quit, so you're never left on a fake position.
+Connect a device and the sidebar lists it by name, iOS version and USB status —
+switch between attached iPhones and iPads from the **Device** menu at the top.
+The badge over the map reads *Real location* or *Location edited*, so you always
+know whether the device is currently faked, and **Restore real location** puts it
+back (the app also restores automatically when you disconnect or quit).
+
+From there, two ways to set a location:
+
+### Move to a place
+
+![Searching an address, with the selected destination and a Move here button](docs/select_address.png)
+
+Search a place or address, or click anywhere on the map. The pin shows the
+matched address and its coordinates — hit **Move here** and the device jumps
+there instantly.
+
+### Build a route
+
+![A planned driving route from Atlanta to Clayton, GA with speed presets](docs/build_route.png)
+
+Pick a starting point (this Mac's current location, or any address) and a
+destination. MapKit returns a **driving route that follows actual roads**, with
+its name, total distance and estimated time. Choose **Walk**, **Cycle** or
+**Drive**, or set a custom speed up to ~186 mph (300 km/h), turn on repeat, and
+press **Start route**. Positions are pushed at 10 Hz, so the device moves
+smoothly instead of jumping between waypoints — and you can pause and resume at
+any point.
 
 ## Requirements
 
