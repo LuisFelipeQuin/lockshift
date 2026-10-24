@@ -24,7 +24,7 @@ jobs:
           ./.venv/bin/pip install --upgrade pip
           ./.venv/bin/pip install -r sidecar/requirements.txt pyinstaller
 
-      - name: Build FakeGPS.app
+      - name: Build LockShift.app
         env:
           PYTHON: ${{ github.workspace }}/.venv/bin/python
         run: |
@@ -36,8 +36,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            "dist/FakeGPS-macos-arm64.zip#FakeGPS-macos-arm64.zip" \
-            --title "FakeGPS $GITHUB_REF_NAME" \
+            "dist/LockShift-macos-arm64.zip#LockShift-macos-arm64.zip" \
+            --title "LockShift $GITHUB_REF_NAME" \
             --notes-file .github/release-notes.md \
           || gh release upload "$GITHUB_REF_NAME" \
-            "dist/FakeGPS-macos-arm64.zip#FakeGPS-macos-arm64.zip" --clobber
+            "dist/LockShift-macos-arm64.zip#LockShift-macos-arm64.zip" --clobber

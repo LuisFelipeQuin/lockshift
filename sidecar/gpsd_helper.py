@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ios-fake-gps sidecar.
+lockshift sidecar.
 
 A long-lived helper that holds ONE developer connection to a tethered iPhone
 open and streams simulated GPS coordinates to it. The macOS app (SwiftUI) speaks
@@ -208,7 +208,7 @@ async def run(address: tuple[str, int], udid: Optional[str]) -> int:
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="ios-fake-gps sidecar")
+    p = argparse.ArgumentParser(description="lockshift sidecar")
     p.add_argument("--udid", default=None, help="target device UDID (default: first)")
     p.add_argument(
         "--tunneld-host", default=TUNNELD_DEFAULT_ADDRESS[0], help="tunneld host"

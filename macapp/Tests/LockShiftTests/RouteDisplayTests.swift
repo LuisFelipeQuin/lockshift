@@ -1,5 +1,5 @@
 import XCTest
-@testable import FakeGPS
+@testable import LockShift
 
 final class RouteDisplayTests: XCTestCase {
     func testMilesAndHourRollover() {

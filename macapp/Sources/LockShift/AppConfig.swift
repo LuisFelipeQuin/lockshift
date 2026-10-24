@@ -2,16 +2,16 @@ import Foundation
 
 /// How the Python side (sidecar / tunnel / usbmux) is provided.
 enum RuntimeKind {
-    /// A standalone PyInstaller binary shipped inside FakeGPS.app. No Python
+    /// A standalone PyInstaller binary shipped inside LockShift.app. No Python
     /// install needed on the machine.
     case bundled(URL)
-    /// A development setup: the venv's python running `fakegps_runtime.py`.
+    /// A development setup: the venv's python running `lockshift_runtime.py`.
     case dev(python: URL, script: URL)
 }
 
 /// Resolves how to launch the runtime in its three modes: `sidecar`, `tunneld`
 /// and `usbmux`. Both bundled and dev paths funnel through the same
-/// `fakegps_runtime` entry point, so behaviour is identical.
+/// `lockshift_runtime` entry point, so behaviour is identical.
 @MainActor
 final class AppConfig: ObservableObject {
     let runtime: RuntimeKind
@@ -22,14 +22,14 @@ final class AppConfig: ObservableObject {
 
     private static func resolve() -> RuntimeKind {
         if let res = Bundle.main.resourceURL {
-            let frozen = res.appendingPathComponent("runtime/fakegps-runtime")
+            let frozen = res.appendingPathComponent("runtime/lockshift-runtime")
             if FileManager.default.isExecutableFile(atPath: frozen.path) {
                 return .bundled(frozen)
             }
         }
         let home = FileManager.default.homeDirectoryForCurrentUser
-        let python = home.appendingPathComponent(".ios-fake-gps/venv/bin/python")
-        let script = home.appendingPathComponent(".ios-fake-gps/fakegps_runtime.py")
+        let python = home.appendingPathComponent(".lockshift/venv/bin/python")
+        let script = home.appendingPathComponent(".lockshift/lockshift_runtime.py")
         return .dev(python: python, script: script)
     }
 
@@ -45,7 +45,7 @@ final class AppConfig: ObservableObject {
             let sourceRuntime = URL(fileURLWithPath: #filePath)
                 .deletingLastPathComponent().deletingLastPathComponent()
                 .deletingLastPathComponent().deletingLastPathComponent()
-                .appendingPathComponent("sidecar/fakegps_runtime.py")
+                .appendingPathComponent("sidecar/lockshift_runtime.py")
             if mode != "tunneld", FileManager.default.fileExists(atPath: sourceRuntime.path) {
                 return (python, [sourceRuntime.path, mode])
             }

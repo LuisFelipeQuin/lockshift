@@ -9,8 +9,8 @@ import types
 import unittest
 from unittest.mock import patch
 
-runtime_path = Path(__file__).resolve().parents[3] / 'sidecar' / 'fakegps_runtime.py'
-spec = importlib.util.spec_from_file_location('fakegps_runtime', runtime_path)
+runtime_path = Path(__file__).resolve().parents[3] / 'sidecar' / 'lockshift_runtime.py'
+spec = importlib.util.spec_from_file_location('lockshift_runtime', runtime_path)
 runtime = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(runtime)
 

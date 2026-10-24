@@ -1,5 +1,5 @@
 import XCTest
-@testable import FakeGPS
+@testable import LockShift
 
 final class RestoreLocationTests: XCTestCase {
     // Exercises the real process/JSON transport without touching an iPhone.

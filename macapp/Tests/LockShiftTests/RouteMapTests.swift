@@ -1,6 +1,6 @@
 import MapKit
 import XCTest
-@testable import FakeGPS
+@testable import LockShift
 
 final class RouteMapTests: XCTestCase {
     func testCameraBoundsIncludeBothEndpointsAndSinglePointHasUsefulZoom() throws {

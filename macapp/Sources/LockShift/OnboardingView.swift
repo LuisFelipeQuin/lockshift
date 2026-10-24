@@ -77,7 +77,7 @@ struct OnboardingView: View {
                 .font(.system(size: 30))
                 .foregroundStyle(.tint)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Set up iOS Fake GPS").font(.title3.bold())
+                Text("Set up LockShift").font(.title3.bold())
                 Text("A few quick steps and you're ready.").font(.caption).foregroundStyle(.secondary)
             }
             Spacer()

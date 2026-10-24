@@ -1,6 +1,6 @@
 import MapKit
 import XCTest
-@testable import FakeGPS
+@testable import LockShift
 
 @MainActor
 final class RoutePlannerTests: XCTestCase {

@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in improving iOS Fake GPS! Contributions of all kinds
+Thanks for your interest in improving LockShift! Contributions of all kinds
 are welcome — bug reports, fixes, features and docs.
 
 ## Ground rules
@@ -13,11 +13,11 @@ are welcome — bug reports, fixes, features and docs.
 ## Project layout
 
 ```
-macapp/Sources/FakeGPS/   the macOS app (SwiftUI + MapKit)
-sidecar/                  the Python engine + runtime entry point
-scripts/                  build_runtime.sh, build_app.sh, make_icon.py
-assets/                   app icon
-docs/                     screenshots
+macapp/Sources/LockShift/  the macOS app (SwiftUI + MapKit)
+sidecar/                   the Python engine + runtime entry point
+scripts/                   build_runtime.sh, build_app.sh, make_icon.py
+assets/                    app icon
+docs/                      screenshots
 ```
 
 ## Development setup
@@ -25,7 +25,7 @@ docs/                     screenshots
 Requirements: macOS on Apple silicon, Xcode / Swift toolchain, Python 3.10+.
 
 ```bash
-# one-time: set up the Python engine in ~/.ios-fake-gps
+# one-time: set up the Python engine in ~/.lockshift
 ./setup.sh
 
 # run the app from source
@@ -35,13 +35,13 @@ cd macapp && swift run
 To start the developer tunnel while testing from source:
 
 ```bash
-sudo ~/.ios-fake-gps/venv/bin/python ~/.ios-fake-gps/fakegps_runtime.py tunneld
+sudo ~/.lockshift/venv/bin/python ~/.lockshift/lockshift_runtime.py tunneld
 ```
 
 ## Building the release artifact
 
 ```bash
-./scripts/build_app.sh     # -> dist/FakeGPS.app and dist/FakeGPS-macos-arm64.zip
+./scripts/build_app.sh     # -> dist/LockShift.app and dist/LockShift-macos-arm64.zip
 ```
 
 CI builds the same artifact automatically when a `v*` tag is pushed.
@@ -57,4 +57,4 @@ CI builds the same artifact automatically when a `v*` tag is pushed.
 
 Open an issue using the templates. Include your macOS version, Mac model
 (e.g. M1/M4), iPhone model and iOS version, and any relevant output from
-`/tmp/ios-fake-gps-tunneld.log`.
+`/tmp/lockshift-tunneld.log`.

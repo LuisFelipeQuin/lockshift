@@ -1,4 +1,6 @@
-# iOS Fake GPS
+# LockShift
+
+**Fake GPS for a non-jailbroken iPhone or iPad, from your Mac.**
 
 Set a fixed location, or drive a route along real roads, on a **non-jailbroken**
 iPhone or iPad — all from a native macOS app. The phone just needs to be plugged
@@ -72,14 +74,14 @@ If you're opening a build that macOS flags as coming from an unidentified
 developer, right-click the app → **Open**, or clear the quarantine flag once:
 
 ```bash
-xattr -dr com.apple.quarantine /Applications/FakeGPS.app
+xattr -dr com.apple.quarantine /Applications/LockShift.app
 ```
 
 ## Build from source
 
 The project is a Swift package (`macapp/`) plus a Python engine (`sidecar/`).
 
-Set up the Python side once. It lives in `~/.ios-fake-gps`, **not** in
+Set up the Python side once. It lives in `~/.lockshift`, **not** in
 `~/Documents`, because the root tunnel daemon can't read TCC-protected folders:
 
 ```bash
@@ -95,14 +97,14 @@ cd macapp && swift run        # or open macapp/Package.swift in Xcode and Run
 Produce the bundled, double-clickable app and a release zip:
 
 ```bash
-./scripts/build_app.sh        # -> dist/FakeGPS.app + dist/FakeGPS-macos-arm64.zip
+./scripts/build_app.sh        # -> dist/LockShift.app + dist/LockShift-macos-arm64.zip
 ```
 
 Pushing a `v*` tag runs the same build on a macOS runner and attaches the zip to
 a GitHub release. Regenerate the app icon with:
 
 ```bash
-~/.ios-fake-gps/venv/bin/python scripts/make_icon.py
+~/.lockshift/venv/bin/python scripts/make_icon.py
 iconutil -c icns assets/AppIcon.iconset -o assets/AppIcon.icns
 ```
 
@@ -119,7 +121,7 @@ macOS app (SwiftUI + MapKit)             bundled engine               iPhone / i
   interpolation, so speed, pause and repeat are all controlled on the Mac side.
 - The **engine** is a small Python program built on
   [pymobiledevice3](https://github.com/doronz88/pymobiledevice3), frozen into a
-  standalone binary inside `FakeGPS.app` — no Python needed on your Mac. It
+  standalone binary inside `LockShift.app` — no Python needed on your Mac. It
   holds one developer connection open and applies each coordinate.
 - A small **tunnel daemon** (started by the app, as root) opens the developer
   tunnel and mounts the Developer Disk Image. Required on iOS 17+.
@@ -127,13 +129,13 @@ macOS app (SwiftUI + MapKit)             bundled engine               iPhone / i
 ### Project layout
 
 ```
-ios-fake-gps/
-├── macapp/Sources/FakeGPS/   the macOS app (SwiftUI + MapKit)
-├── macapp/Tests/             unit tests for device selection, update rate, map gestures
-├── sidecar/                  the Python engine + runtime entry point
-├── scripts/                  build_runtime.sh, build_app.sh, make_icon.py
-├── assets/                   app icon
-└── docs/                     screenshots
+lockshift/
+├── macapp/Sources/LockShift/  the macOS app (SwiftUI + MapKit)
+├── macapp/Tests/              unit tests for device selection, update rate, map gestures
+├── sidecar/                   the Python engine + runtime entry point
+├── scripts/                   build_runtime.sh, build_app.sh, make_icon.py
+├── assets/                    app icon
+└── docs/                      screenshots
 ```
 
 ## Command line (optional)
@@ -142,7 +144,7 @@ The engine inside the app is also usable from the Terminal. It has three modes:
 `tunneld`, `usbmux` and `sidecar`.
 
 ```bash
-RUNTIME="/Applications/FakeGPS.app/Contents/Resources/runtime/fakegps-runtime"
+RUNTIME="/Applications/LockShift.app/Contents/Resources/runtime/lockshift-runtime"
 
 sudo "$RUNTIME" tunneld       # start the developer tunnel (keep it running)
 "$RUNTIME" usbmux             # list attached devices as one JSON line (no tunnel needed)
@@ -153,7 +155,7 @@ sudo "$RUNTIME" tunneld       # start the developer tunnel (keep it running)
 ## Troubleshooting
 
 - **Tunnel won't start** — make sure you entered the admin password; the daemon
-  needs root. Logs are at `/tmp/ios-fake-gps-tunneld.log`.
+  needs root. Logs are at `/tmp/lockshift-tunneld.log`.
 - **Device never detected** — check the cable, tap **Trust** on the device, and
   confirm **Developer Mode** is enabled (then reboot the device).
 - **"Could not open LocationSimulation"** — Developer Mode is off, or the

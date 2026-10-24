@@ -2,12 +2,12 @@
 #
 # One-time setup for the Python sidecar.
 #
-# The runtime is installed in ~/.ios-fake-gps (a home dot-folder) rather than the
+# The runtime is installed in ~/.lockshift (a home dot-folder) rather than the
 # repo, because the privileged tunnel daemon runs as root and macOS TCC blocks
 # root from reading ~/Documents, ~/Desktop and ~/Downloads.
 set -euo pipefail
 
-RUNTIME="$HOME/.ios-fake-gps"
+RUNTIME="$HOME/.lockshift"
 REPO="$(cd "$(dirname "$0")" && pwd)"
 
 echo "Creating runtime in $RUNTIME"
@@ -20,7 +20,7 @@ fi
 "$RUNTIME/venv/bin/pip" install --upgrade pip
 "$RUNTIME/venv/bin/pip" install -r "$REPO/sidecar/requirements.txt"
 cp "$REPO/sidecar/gpsd_helper.py" "$RUNTIME/gpsd_helper.py"
-cp "$REPO/sidecar/fakegps_runtime.py" "$RUNTIME/fakegps_runtime.py"
+cp "$REPO/sidecar/lockshift_runtime.py" "$RUNTIME/lockshift_runtime.py"
 
 echo
 echo "Done."

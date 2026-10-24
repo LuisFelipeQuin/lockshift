@@ -25,7 +25,7 @@ final class MacLocation: NSObject, ObservableObject {
         // macOS cannot repeat the permission prompt after access was denied.
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices") {
             if !NSWorkspace.shared.open(url) {
-                message = "Open System Settings → Privacy & Security → Location Services to allow iOS Fake GPS."
+                message = "Open System Settings → Privacy & Security → Location Services to allow LockShift."
             }
         }
     }
@@ -84,7 +84,7 @@ final class MacLocation: NSObject, ObservableObject {
             }
         case .denied, .restricted:
             needsLocationSettings = true
-            fail("Allow iOS Fake GPS in System Settings → Privacy & Security → Location Services.")
+            fail("Allow LockShift in System Settings → Privacy & Security → Location Services.")
         @unknown default:
             fail("This Mac’s location is unavailable.")
         }
@@ -129,7 +129,7 @@ extension MacLocation: CLLocationManagerDelegate {
             guard self.manager === manager, self.isLocating else { return }
             if (error as? CLError)?.code == .denied {
                 self.needsLocationSettings = true
-                self.fail("Allow iOS Fake GPS in System Settings → Privacy & Security → Location Services.")
+                self.fail("Allow LockShift in System Settings → Privacy & Security → Location Services.")
             } else {
                 self.fail("Couldn’t find this Mac’s location. Try again.")
             }

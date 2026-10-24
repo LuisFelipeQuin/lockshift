@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-<key>CFBundleIdentifier</key><string>io.github.orestislef.ios-fake-gps</string>
-<key>CFBundleName</key><string>iOS Fake GPS</string>
+<key>CFBundleIdentifier</key><string>io.github.luisfelipequin.lockshift</string>
+<key>CFBundleName</key><string>LockShift</string>
 <key>NSLocationUsageDescription</key><string>Use this Mac’s location as the approximate starting position of your USB-connected iPhone on the map.</string>
 <key>NSLocationWhenInUseUsageDescription</key><string>Use this Mac’s location as the approximate starting position of your USB-connected iPhone on the map.</string>
 </dict></plist>

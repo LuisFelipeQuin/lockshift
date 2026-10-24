@@ -19,4 +19,4 @@ jobs:
 
       - name: Check Python syntax
         run: |
-          python3 -m py_compile sidecar/gpsd_helper.py sidecar/fakegps_runtime.py
+          python3 -m py_compile sidecar/gpsd_helper.py sidecar/lockshift_runtime.py

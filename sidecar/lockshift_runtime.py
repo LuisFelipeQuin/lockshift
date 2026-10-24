@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
 Combined runtime entry point, frozen by PyInstaller into a single standalone
-binary that ships inside FakeGPS.app — so end users need no Python install.
+binary that ships inside LockShift.app — so end users need no Python install.
 
 Usage:
-    fakegps-runtime tunneld [args...]   # runs `pymobiledevice3 remote tunneld`
-    fakegps-runtime sidecar [args...]   # runs the location-simulation sidecar
+    lockshift-runtime tunneld [args...]   # runs `pymobiledevice3 remote tunneld`
+    lockshift-runtime sidecar [args...]   # runs the location-simulation sidecar
 """
 import sys
 
@@ -72,7 +72,7 @@ def main() -> int:
             print(json.dumps({"devices": [], "error": str(e)}))
         return 0
 
-    sys.stderr.write("usage: fakegps-runtime {tunneld|sidecar|usbmux} [args...]\n")
+    sys.stderr.write("usage: lockshift-runtime {tunneld|sidecar|usbmux} [args...]\n")
     return 2
 
 

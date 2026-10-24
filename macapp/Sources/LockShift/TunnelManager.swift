@@ -46,7 +46,7 @@ final class TunnelManager: ObservableObject {
 
     /// Launch tunneld with administrator privileges. Shows the macOS auth dialog.
     /// Runs detached so it keeps managing tunnels after this call returns.
-    static let logPath = "/tmp/ios-fake-gps-tunneld.log"
+    static let logPath = "/tmp/lockshift-tunneld.log"
 
     func startTunneld() {
         Task { await ensureRunning() }

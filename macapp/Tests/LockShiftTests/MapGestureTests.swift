@@ -2,7 +2,7 @@ import AppKit
 import MapKit
 import SwiftUI
 import XCTest
-@testable import FakeGPS
+@testable import LockShift
 
 final class MapGestureTests: XCTestCase {
     @MainActor func testWindowlessGesturesUseTheKeyWindowOnly() {

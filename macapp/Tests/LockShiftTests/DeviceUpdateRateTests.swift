@@ -1,6 +1,6 @@
 import CoreLocation
 import XCTest
-@testable import FakeGPS
+@testable import LockShift
 
 @MainActor
 final class DeviceUpdateRateTests: XCTestCase {

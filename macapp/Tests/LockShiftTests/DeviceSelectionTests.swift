@@ -1,5 +1,5 @@
 import XCTest
-@testable import FakeGPS
+@testable import LockShift
 
 final class DeviceSelectionTests: XCTestCase {
     private let phone = DeviceInfo(udid: "z-phone", name: "My phone", productType: "iPhone17,1", productVersion: "26.0")

@@ -27,7 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 @main
-struct FakeGPSApp: App {
+struct LockShiftApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var config: AppConfig
     @StateObject private var sidecar: Sidecar
@@ -53,7 +53,7 @@ struct FakeGPSApp: App {
     }
 
     var body: some Scene {
-        WindowGroup("iOS Fake GPS") {
+        WindowGroup("LockShift") {
             ContentView()
                 .environmentObject(config)
                 .environmentObject(sidecar)

@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-The latest release on the [Releases](https://github.com/orestislef/ios-fake-gps/releases)
+The latest release on the [Releases](https://github.com/LuisFelipeQuin/lockshift/releases)
 page is the supported version.
 
 ## Reporting a vulnerability

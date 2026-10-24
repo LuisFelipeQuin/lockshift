@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a problem with iOS Fake GPS
+description: Report a problem with LockShift
 labels: ["bug"]
 body:
   - type: markdown
@@ -47,5 +47,5 @@ body:
     id: logs
     attributes:
       label: Tunnel log (optional)
-      description: Output from /tmp/ios-fake-gps-tunneld.log, if relevant.
+      description: Output from /tmp/lockshift-tunneld.log, if relevant.
       render: shell

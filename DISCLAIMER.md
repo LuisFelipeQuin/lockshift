@@ -1,6 +1,6 @@
 # Disclaimer
 
-iOS Fake GPS is provided for **legitimate, lawful use only** — primarily:
+LockShift is provided for **legitimate, lawful use only** — primarily:
 
 - testing and developing your own location-aware apps,
 - QA and demos that need a reproducible location or route,
