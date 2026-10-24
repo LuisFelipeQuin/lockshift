@@ -222,7 +222,7 @@ struct ContentView: View {
                     .frame(width: 40, height: 40)
                     .background(.blue.gradient, in: RoundedRectangle(cornerRadius: 13))
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("iOS Fake GPS").font(.headline)
+                    Text("LockIphone").font(.headline)
                     Text("Devices & locations").font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
@@ -235,8 +235,9 @@ struct ContentView: View {
                             set: { devices.select($0) }
                         )) {
                             ForEach(devices.connectedDevices) { device in
-                                Text(device.selectionLabel + " · " + String(device.udid.suffix(4)))
-                                    .tag(device.udid)
+                                // Text(device.selectionLabel)
+                                Text("Your Iphone")
+                                .tag(device.udid)
                             }
                         }
                         .pickerStyle(.menu)
